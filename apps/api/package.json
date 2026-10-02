@@ -1,0 +1,24 @@
+{
+  "name": "@cob/api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The catalogue API: Hono on Cloudflare Workers, over D1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply cob-codex --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cob-codex --remote",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cob/shared": "0.0.1",
+    "@cte2/schema": "0.0.1",
+    "hono": "^4.9.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250920.0",
+    "wrangler": "^4.40.0"
+  }
+}

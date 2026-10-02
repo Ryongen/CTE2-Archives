@@ -1,0 +1,12 @@
+name = "cob-codex-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cob-codex"
+database_id = "e729a86a-271b-4c81-99a7-a79ef7f897cd"
+migrations_dir = "../../migrations"
+
+# Secrets, set with `wrangler secret put`:
+#   TURNSTILE_SECRET  uploads require a Turnstile token when this is set

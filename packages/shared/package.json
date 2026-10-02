@@ -1,0 +1,17 @@
+{
+  "name": "@cob/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "What the catalogue's API, site and indexer agree on: response shapes and the filter codec",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cte2/schema": "0.0.1"
+  }
+}

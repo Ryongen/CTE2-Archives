@@ -1,0 +1,3 @@
+[submodule "vendor/cte2-pob"]
+	path = vendor/cte2-pob
+	url = https://github.com/Ryongen/Craft-Of-Building.git

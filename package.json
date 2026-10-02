@@ -1,0 +1,30 @@
+{
+  "name": "cob-codex",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A catalogue of Craft to Exile 2 builds for Craft of Building",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "vendor/cte2-pob/packages/extractor",
+    "vendor/cte2-pob/packages/schema",
+    "vendor/cte2-pob/packages/engine",
+    "vendor/cte2-pob/packages/view"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:vendor": "npm run -w @cte2/extractor build && npm run -w @cte2/schema build && npm run -w @cte2/engine build && npm run -w @cte2/view build",
+    "catalogue-data": "node tools/sync-catalogue-data.mjs",
+    "dev:api": "npm run -w @cob/api dev",
+    "dev:web": "npm run -w @cob/web dev",
+    "typecheck": "npm run build:vendor && npm run -ws --if-present typecheck",
+    "test": "npm run build:vendor && npm run -w @cob/shared test && npm run -w @cob/api test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.7.2"
+  }
+}

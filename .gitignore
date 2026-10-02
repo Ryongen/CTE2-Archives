@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Wrangler's local state (local D1 and friends).
+.wrangler/
+.dev.vars
+
+# Game data is derived from a CTE2 install and never committed, as in cte2-pob.
+# `npm run catalogue-data` copies it in from there.
+/data/
+/apps/web/public/data/
+
+.env
+.env.*
+!.env.example
