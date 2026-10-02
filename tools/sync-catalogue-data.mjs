@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Bring the planner's catalogue data into this repo, and load each pack's index into D1.
+ * Load each pack's index from the planner's catalogue data into D1.
  *
  * Game data never goes in git (see .gitignore). cte2-pob's `npm run catalogue-data` writes
- * `data/catalogue/<mnsVersion>/{snapshot.json, index-data.json}` from a local CTE2 install; this
- * copies that into `data/catalogue/` here, puts the slim snapshot where the web app serves it, and
- * writes `data/packs.sql`, which upserts every pack's index into the `packs` table.
+ * `data/catalogue/<mnsVersion>/index-data.json` from a local CTE2 install; this writes
+ * `data/packs.sql`, which upserts every pack's index into the `packs` table. The site itself reads
+ * the snapshot and icons from CoB's published site data, so nothing else is needed here.
  *
  *   node tools/sync-catalogue-data.mjs [--from <dir>] [--local | --remote]
  *
@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,16 +36,6 @@ for (const version of readdirSync(from)) {
   const indexPath = join(source, "index-data.json");
   if (!existsSync(indexPath)) continue;
 
-  const dest = join(root, "data", "catalogue", version);
-  const web = join(root, "apps", "web", "public", "data", version);
-  mkdirSync(dest, { recursive: true });
-  mkdirSync(web, { recursive: true });
-  for (const file of ["index-data.json", "snapshot.json"]) {
-    if (!existsSync(join(source, file))) continue;
-    copyFileSync(join(source, file), join(dest, file));
-    copyFileSync(join(source, file), join(web, file));
-  }
-
   // Compact JSON: D1 stores it as one TEXT value, and whitespace there is just bytes.
   const index = JSON.stringify(JSON.parse(readFileSync(indexPath, "utf8")));
   statements.push(
@@ -60,6 +50,7 @@ if (statements.length === 0) {
   process.exit(1);
 }
 
+mkdirSync(join(root, "data"), { recursive: true });
 const sqlPath = join(root, "data", "packs.sql");
 writeFileSync(sqlPath, statements.join("\n") + "\n");
 console.log(`wrote ${sqlPath}`);

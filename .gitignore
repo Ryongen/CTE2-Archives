@@ -9,7 +9,6 @@ dist/
 # Game data is derived from a CTE2 install and never committed, as in cte2-pob.
 # `npm run catalogue-data` copies it in from there.
 /data/
-/apps/web/public/data/
 
 .env
 .env.*
