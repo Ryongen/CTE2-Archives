@@ -433,6 +433,15 @@ table.builds tr:hover td {
 .figure .value.bad {
   color: var(--bad);
 }
+.detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 12px;
+  align-items: start;
+}
+.detail-main {
+  min-width: 0;
+}
 .columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -487,7 +496,13 @@ table.builds tr:hover td {
 p.supports {
   padding-left: 0;
 }
-.gear li > span {
+.gear .hover {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+.gear-text {
   display: flex;
   flex-direction: column;
 }
@@ -586,6 +601,16 @@ p.supports {
 
 /* --- narrow screens ------------------------------------------------------------------------ */
 
+@media (max-width: 1100px) {
+  .detail-body {
+    grid-template-columns: 1fr;
+  }
+  .stats-sidebar {
+    position: static;
+    max-height: none;
+  }
+}
+
 @media (max-width: 860px) {
   .list-page,
   .columns {
@@ -603,5 +628,347 @@ p.supports {
   table.builds th:nth-child(7),
   table.builds td:nth-child(7) {
     display: none;
+  }
+}
+
+/* --- the stats sidebar: CoB's vitals block (panels/stats/VitalsBlock) ---------------------- */
+
+.stats-sidebar {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 0;
+}
+.vitals {
+  padding: 10px 10px 14px 16px;
+}
+.vitals-group + .vitals-group {
+  margin-top: 14px;
+}
+.vitals-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+.vitals-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border-radius: 2px;
+  line-height: 1.5;
+}
+.vitals-row.pick {
+  cursor: pointer;
+}
+.vitals-row.pick:hover {
+  background: var(--bg-raised);
+}
+.vitals-caret {
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 11px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 10px;
+  user-select: none;
+}
+.vitals-row.indent .vitals-label {
+  padding-left: 12px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.vitals-row.indent .vitals-value {
+  font-size: 12px;
+}
+.vitals-row.strong .vitals-value {
+  font-weight: 650;
+  color: var(--text);
+}
+.vitals-row.strong .vitals-label {
+  color: var(--text);
+}
+.vitals-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.vitals-value {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.vitals-value.bad {
+  color: var(--bad);
+}
+
+/* --- hover cards: CoB's item, skill and gem tooltips (ui/ItemTooltip, ui/SpellTooltip) ----- */
+
+.hover {
+  display: inline-flex;
+  cursor: help;
+}
+.item-window {
+  min-width: 290px;
+  max-width: 360px;
+  background-color: #0b090e;
+  border: 2px solid #555555;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+  font-family: Consolas, "Courier New", monospace;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.item-window.floating {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+}
+.item-window.rarity-common { border-color: #aaaaaa; }
+.item-window.rarity-common .tt-title,
+.item-window.rarity-common .tt-rarity-label { color: #aaaaaa; }
+.item-window.rarity-uncommon { border-color: #55ff55; }
+.item-window.rarity-uncommon .tt-title,
+.item-window.rarity-uncommon .tt-rarity-label { color: #55ff55; }
+.item-window.rarity-rare { border-color: #55ffff; }
+.item-window.rarity-rare .tt-title,
+.item-window.rarity-rare .tt-rarity-label { color: #55ffff; }
+.item-window.rarity-epic { border-color: #aa00aa; }
+.item-window.rarity-epic .tt-title,
+.item-window.rarity-epic .tt-rarity-label { color: #aa00aa; }
+.item-window.rarity-legendary { border-color: #ffaa00; }
+.item-window.rarity-legendary .tt-title,
+.item-window.rarity-legendary .tt-rarity-label { color: #ffaa00; }
+.item-window.rarity-unique { border-color: #e54c4c; }
+.item-window.rarity-unique .tt-title,
+.item-window.rarity-unique .tt-rarity-label { color: #ff5555; }
+.item-window.rarity-mythic { border-color: #5b0088; }
+.item-window.rarity-mythic .tt-title,
+.item-window.rarity-mythic .tt-rarity-label { color: #aa00aa; }
+.item-window.rarity-runeword { border-color: #ffff55; }
+.item-window.rarity-runeword .tt-title,
+.item-window.rarity-runeword .tt-rarity-label { color: #ffff55; }
+
+.item-window.tt-spell {
+  min-width: 300px;
+  max-width: 380px;
+  border-color: #6b4fa0;
+}
+.item-window.tt-spell .tt-title {
+  color: #ff9d9d;
+}
+.item-window.tt-gem {
+  min-width: 260px;
+  border-color: #3f7a4e;
+}
+.item-window.tt-gem .tt-title {
+  color: #7fe08f;
+}
+.item-window.tt-perk-card {
+  min-width: 260px;
+  border-color: #7a6330;
+}
+.item-window.tt-perk-card .tt-title {
+  color: #ffcc66;
+}
+
+.tt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tt-icon-frame {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #444444;
+  background: #15121b;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tt-spell-icon {
+  width: 30px;
+  height: 30px;
+  image-rendering: pixelated;
+}
+.tt-title-container {
+  display: flex;
+  flex-direction: column;
+}
+.tt-title {
+  font-weight: bold;
+  font-size: 14px;
+}
+.tt-subtitle {
+  font-size: 11px;
+  color: #aaaaaa;
+}
+.tt-divider {
+  height: 1px;
+  background-color: #3a2233;
+  margin: 6px 0;
+}
+.tt-line {
+  white-space: pre-wrap;
+}
+.tt-line .stat-val {
+  color: #55ff55;
+  font-weight: bold;
+}
+.tt-line.worse .stat-val {
+  color: #ff5555;
+}
+.tt-line .stat-text {
+  color: #ffffff;
+}
+.tt-desc {
+  color: #aaaaaa;
+}
+.tt-desc p {
+  margin: 0 0 6px;
+}
+.tt-desc p:last-child {
+  margin-bottom: 0;
+}
+.tt-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tt-fact-k {
+  color: #6e7583;
+}
+.tt-fact-v {
+  color: #cfcfcf;
+  font-variant-numeric: tabular-nums;
+}
+.tt-fact-v.accent {
+  color: var(--accent);
+}
+.tt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tt-chip {
+  background: #1d2130;
+  color: #8fa3c7;
+  border-radius: 2px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 1.6;
+  text-transform: capitalize;
+}
+.tt-sockets,
+.tt-socket-line {
+  color: #aaaaaa;
+}
+.tt-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tt-rarity-label {
+  font-weight: bold;
+  font-size: 12px;
+}
+.tt-section.tt-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tt-req {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+}
+.tt-req.met {
+  color: #ffffff;
+}
+.tt-req.met .tt-icon {
+  color: #00ff00;
+}
+.tt-req.unmet,
+.tt-req.unmet .tt-icon {
+  color: #ff5555;
+}
+.tt-category-group {
+  margin-bottom: 6px;
+}
+.tt-category-group:last-child {
+  margin-bottom: 0;
+}
+.tt-category-group.dormant {
+  opacity: 0.6;
+}
+.tt-dormant {
+  color: #aaaaaa;
+  font-size: 11px;
+  font-weight: normal;
+}
+.tt-category-title {
+  font-weight: bold;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+.tt-category-title.prefix,
+.tt-category-title.suffix {
+  color: #55ffff;
+}
+.tt-category-title.implicit {
+  color: #5555ff;
+}
+.tt-category-title.corruption {
+  color: #ff5555;
+}
+.tt-category-title.unique,
+.tt-category-title.enchant {
+  color: #ffff55;
+}
+.tt-category-title.base {
+  color: #ffffff;
+}
+.tt-category-title.rune,
+.tt-category-title.runeword,
+.tt-category-title.socket {
+  color: #ffaa00;
+}
+.tt-category-title.aura {
+  color: #ff55ff;
+}
+
+/* A card opened by a tap on a phone docks along the bottom (see `useHoverCard`; its breakpoint is `NARROW_QUERY`). */
+@media (max-width: 900px) {
+  .touch-dock {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 9999;
+    max-height: 60vh;
+    overflow: auto;
+  }
+  .touch-dock > * {
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    pointer-events: auto;
   }
 }

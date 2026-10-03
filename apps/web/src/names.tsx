@@ -100,12 +100,15 @@ function gearIcon(game: GameData, baseId: string): string | null {
   return null;
 }
 
-/** An id as an icon and a name. */
-export function Thing({ kind, id, size = 18 }: { kind: FacetKind; id: string; size?: number }): ReactNode {
+/**
+ * An id as an icon and a name. `titled={false}` drops the browser tooltip, for a thing that has a
+ * hover card of its own.
+ */
+export function Thing({ kind, id, size = 18, titled = true }: { kind: FacetKind; id: string; size?: number; titled?: boolean }): ReactNode {
   const game = useGame();
   const icon = iconOf(game, kind, id);
   return (
-    <span className="thing" title={`${KIND_LABEL[kind]}: ${id}`}>
+    <span className="thing" title={titled ? `${KIND_LABEL[kind]}: ${id}` : undefined}>
       {icon === null ? null : <img src={icon} width={size} height={size} alt="" draggable={false} />}
       {nameOf(game, kind, id)}
     </span>
@@ -113,10 +116,12 @@ export function Thing({ kind, id, size = 18 }: { kind: FacetKind; id: string; si
 }
 
 /** Just the icon, with the name as a tooltip. Falls back to the name when there is no icon. */
-export function ThingIcon({ kind, id, size = 22 }: { kind: FacetKind; id: string; size?: number }): ReactNode {
+export function ThingIcon({ kind, id, size = 22, titled = true }: { kind: FacetKind; id: string; size?: number; titled?: boolean }): ReactNode {
   const game = useGame();
   const icon = iconOf(game, kind, id);
   const name = nameOf(game, kind, id);
   if (icon === null) return <span className="thing-chip">{name}</span>;
-  return <img className="thing-icon" src={icon} width={size} height={size} alt={name} title={name} draggable={false} />;
+  return (
+    <img className="thing-icon" src={icon} width={size} height={size} alt={name} title={titled ? name : undefined} draggable={false} />
+  );
 }
