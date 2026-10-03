@@ -1,4 +1,4 @@
-import type { BuildDoc } from "@cte2/schema";
+import type { BuildDoc, Observation } from "@cte2/schema";
 import type { BuildDetail, BuildListResponse, UploadRequest, UploadResponse } from "@cob/shared";
 
 import { API_URL } from "./config.ts";
@@ -14,6 +14,7 @@ export const api = {
   list: (query: string) => call<BuildListResponse>(`/builds${query ? `?${query}` : ""}`),
   build: (id: string) => call<BuildDetail>(`/builds/${encodeURIComponent(id)}`),
   doc: (id: string) => call<BuildDoc>(`/builds/${encodeURIComponent(id)}/doc`),
+  observed: (id: string) => call<Observation>(`/builds/${encodeURIComponent(id)}/observed`),
   upload: (request: UploadRequest) =>
     call<UploadResponse>("/builds", {
       method: "POST",

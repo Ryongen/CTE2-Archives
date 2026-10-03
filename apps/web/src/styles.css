@@ -996,3 +996,20 @@ h3.warn {
 .checks strong {
   color: var(--text);
 }
+.diff {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.diff th,
+.diff td {
+  padding: 2px 12px 2px 0;
+  text-align: right;
+}
+.diff th:first-child,
+.diff td:first-child {
+  text-align: left;
+}
+.diff th {
+  font-weight: normal;
+  color: var(--text-faint);
+}

@@ -231,6 +231,18 @@ app.get("/builds/:id/doc", async (c) => {
   return c.body(row.doc, 200, { "content-type": "application/json; charset=utf-8" });
 });
 
+/** A capture's in-game stat sheet, which the build page checks CoB's numbers against. */
+app.get("/builds/:id/observed", async (c) => {
+  const row = await c.env.DB.prepare(
+    `SELECT x.observed FROM build_docs x JOIN builds b ON b.id = x.build_id
+    WHERE x.build_id = ? AND b.status != 'hidden' AND x.observed IS NOT NULL`,
+  )
+    .bind(c.req.param("id"))
+    .first<{ observed: string }>();
+  if (row === null) return c.json({ error: "No capture for this build" }, 404);
+  return c.body(row.observed, 200, { "content-type": "application/json; charset=utf-8" });
+});
+
 // --- The indexer ----------------------------------------------------------------------------------
 // `apps/indexer` runs the engine where there's CPU to spare and hands the numbers back here.
 

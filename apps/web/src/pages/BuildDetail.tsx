@@ -26,6 +26,7 @@ import {
   slotName,
   stageDoc,
   stageList,
+  statName,
   text,
   TREE_KEYS,
   uniqueName,
@@ -33,6 +34,7 @@ import {
   wornItems,
   type BuildDoc,
   type BuildStage,
+  type Observation,
   type TreeKey,
 } from "@cte2/schema";
 import {
@@ -47,7 +49,7 @@ import {
   type At,
   type HoverInfo,
 } from "@cte2/view";
-import { legalityOf } from "@cob/shared";
+import { checkCapture, legalityOf, type CaptureCheck } from "@cob/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -66,6 +68,12 @@ export function BuildDetailPage(): ReactNode {
   const detail = useQuery({ queryKey: ["build", id], queryFn: () => api.build(id) });
   const doc = useQuery({ queryKey: ["doc", id], queryFn: () => api.doc(id), staleTime: Infinity });
   const game = useGame();
+  const observed = useQuery({
+    queryKey: ["observed", id],
+    queryFn: () => api.observed(id),
+    enabled: detail.data?.hasObserved === true,
+    staleTime: Infinity,
+  });
 
   const stages = useMemo(() => (doc.data === undefined ? [] : stageList(doc.data)), [doc.data]);
   const mainId = detail.data?.stages.find((s) => s.isMain)?.stageId;
@@ -103,7 +111,7 @@ export function BuildDetailPage(): ReactNode {
       {stages.length > 1 ? <StagePicker stages={stages} current={stage?.id} mainId={mainId} onPick={setPicked} /> : null}
 
       <WhenLoaded fallback={<p className="empty">Loading game data…</p>}>
-        <BuildBody doc={shown} notes={build.notes} />
+        <BuildBody doc={shown} capture={doc.data} observed={observed.data} notes={build.notes} />
       </WhenLoaded>
     </div>
   );
@@ -113,7 +121,18 @@ export function BuildDetailPage(): ReactNode {
  * Everything that needs the game data. One `deriveBuild` run feeds the headline figures, the
  * sidebar, the skill ranks on the skill cards and the attribute checks on the item cards.
  */
-function BuildBody({ doc, notes }: { doc: BuildDoc; notes: string }): ReactNode {
+function BuildBody({
+  doc,
+  capture,
+  observed,
+  notes,
+}: {
+  doc: BuildDoc;
+  /** The document as uploaded, which is the character the capture describes, whatever stage is shown. */
+  capture: BuildDoc;
+  observed: Observation | undefined;
+  notes: string;
+}): ReactNode {
   const { snapshot } = useWorld();
   const derived = useMemo((): DerivedBuild | Error => {
     try {
@@ -123,11 +142,23 @@ function BuildBody({ doc, notes }: { doc: BuildDoc; notes: string }): ReactNode 
     }
   }, [doc, snapshot]);
   const ok = derived instanceof Error ? undefined : derived;
+  const check = useMemo((): CaptureCheck | undefined => {
+    if (observed === undefined) return undefined;
+    try {
+      // As CoB's fixtures do it: only the buffs the capture recorded, not every one the build could run.
+      const measured = { ...capture, config: { ...(capture.config ?? {}), assumeEffects: "captured" as const } };
+      const sheet = deriveBuild(measured, snapshot);
+      return checkCapture(observed, sheet.stats, snapshot.meta.mineAndSlashVersion);
+    } catch {
+      return undefined;
+    }
+  }, [observed, capture, snapshot]);
 
   return (
     <>
-      {derived instanceof Error ? <p className="error">CoB couldn't compute this build: {derived.message}</p> : <Numbers derived={derived} />}
+      {derived instanceof Error ? <p className="error">CoB couldn't compute this build: {derived.message}</p> : <Numbers derived={derived} check={check} />}
       {ok === undefined ? null : <Checks doc={doc} derived={ok} />}
+      {check === undefined || check.wrong.length === 0 ? null : <CaptureDiff check={check} />}
       <div className="detail-body">
         <div className="detail-main">
           <div className="columns">
@@ -180,7 +211,7 @@ function StagePicker({
   );
 }
 
-function Numbers({ derived }: { derived: DerivedBuild }): ReactNode {
+function Numbers({ derived, check }: { derived: DerivedBuild; check: CaptureCheck | undefined }): ReactNode {
   const rates = damageRates({
     dps: derived.dps,
     fullDps: derived.fullDps,
@@ -202,6 +233,15 @@ function Numbers({ derived }: { derived: DerivedBuild }): ReactNode {
         tone={derived.legal ? "good" : "bad"}
         note={notMakeable.length === 0 ? undefined : "Can't be made in this version"}
       />
+      {check === undefined ? null : (
+        <Figure
+          label="Game check"
+          value={check.wrong.length === 0 ? "Matches" : `${check.wrong.length} of ${check.checked} differ`}
+          tone={check.wrong.length === 0 ? "good" : "bad"}
+          hint="The game's own stat sheet from the capture, against what CoB computes from the gear, tree and skills"
+          note={check.stale ? `Captured on ${check.capturedOn}` : undefined}
+        />
+      )}
     </div>
   );
 }
@@ -265,6 +305,48 @@ function Checks({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild }): Rea
       ) : null}
     </section>
   );
+}
+
+/**
+ * The stats where the game and CoB disagree. That is either a mechanic CoB doesn't model yet, or
+ * something outside the build (a command, a buff that was up) moving the number.
+ */
+function CaptureDiff({ check }: { check: CaptureCheck }): ReactNode {
+  const { snapshot } = useWorld();
+  const shown = check.wrong.slice(0, 25);
+  return (
+    <section className="panel">
+      <h3 className="warn">The game's numbers differ</h3>
+      <p className="faint small">
+        CoB recomputes every stat from the gear, tree and skills. These don't match what the game reported for this
+        character: either something CoB doesn't model yet, or something outside the build changed them.
+        {check.stale ? ` The capture is from ${check.capturedOn}, so some of this may be a version change.` : ""}
+      </p>
+      <table className="diff">
+        <thead>
+          <tr>
+            <th>Stat</th>
+            <th>Game</th>
+            <th>CoB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((r) => (
+            <tr key={r.statId}>
+              <td title={r.statId}>{statName(snapshot, r.statId)}</td>
+              <td>{short(r.expected)}</td>
+              <td>{short(r.actual)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {check.wrong.length > shown.length ? <p className="faint small">And {check.wrong.length - shown.length} more.</p> : null}
+    </section>
+  );
+}
+
+function short(value: number): string {
+  return String(Number(value.toPrecision(5)));
 }
 
 function Figure({
