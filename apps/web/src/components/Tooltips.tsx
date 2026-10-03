@@ -9,11 +9,28 @@
  * card here says what the same card in CoB says. The CSS is copied from CoB's `styles.css`.
  */
 
-import { checkRequirements, type DerivedBuild } from "@cte2/engine";
-import { gearTypeName, itemName, statName, type Item } from "@cte2/schema";
+import { balance, checkRequirements, parseRolledMods, rollToExact, statIndex, type DerivedBuild } from "@cte2/engine";
+import {
+  affix,
+  gearTypeName,
+  humanise,
+  itemName,
+  jewelItemId,
+  jewelName,
+  omenBuckets,
+  omenName,
+  slotName,
+  statName,
+  uniqueName,
+  WATCHER_EYE_UNIQUE,
+  type Item,
+  type Jewel,
+  type OmenSetup,
+} from "@cte2/schema";
 import {
   floatingStyle,
   itemSections,
+  jewelSections,
   smart,
   useWorld,
   type At,
@@ -294,6 +311,129 @@ export function GemWindow({ card, at }: { card: GemCard; at: At }): ReactNode {
           </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** A jewel: no base, no implicit, one affix list. Its item level is what the rolls resolve at. */
+export function JewelWindow({ jewel, level, augments, at }: { jewel: Jewel; level: number; augments: ReadonlySet<string>; at: At }): ReactNode {
+  const world = useWorld();
+  const { snapshot } = world;
+  const sections = useMemo(() => jewelSections(snapshot, jewel, level, augments), [snapshot, jewel, level, augments]);
+  // A Watcher's Eye's `unique` is a marker, not a unique the registry can name.
+  const unique = jewel.unique === undefined || jewel.unique.id === WATCHER_EYE_UNIQUE ? null : uniqueName(snapshot, jewel.unique.id);
+  const icon = world.itemIcon(jewelItemId(jewel));
+
+  return (
+    <div className={`item-window rarity-${(jewel.rarity ?? "common").toLowerCase()} floating`} style={floatingStyle(at, ITEM_CARD)}>
+      <div className="tt-header">
+        <div className="tt-icon-frame">{icon === null ? null : <img className="tt-spell-icon" src={icon} alt="" />}</div>
+        <div className="tt-title-container">
+          <div className="tt-title">{jewelName(snapshot, jewel)}</div>
+          {unique === null ? null : <div className="tt-subtitle">{unique}</div>}
+        </div>
+      </div>
+      <div className="tt-divider" />
+      <div className="tt-section tt-stats">
+        {sections.length === 0 ? (
+          <div className="tt-line">
+            <span className="stat-text">No stats</span>
+          </div>
+        ) : (
+          sections.map((section) => <CategoryGroup key={section.id} section={section} />)
+        )}
+      </div>
+      <div className="tt-divider" />
+      <div className="tt-footer">
+        <div className="tt-rarity-label">{jewel.rarity ? `${jewel.rarity} Jewel` : "Jewel"}</div>
+        <div className="tt-subtitle">Item Level {jewel.itemLevel}</div>
+      </div>
+    </div>
+  );
+}
+
+const OMEN_ICON = "mmorpg:textures/gui/prophecy/omen.png";
+
+/**
+ * The codex (the data calls it an omen): a set bonus paid out in steps by how many worn pieces
+ * qualify. Each step's lines are resolved as CoB's `OmenEditor` does, and the ones the build
+ * hasn't reached are dimmed.
+ */
+export function OmenWindow({ omen, filled, word, at }: { omen: OmenSetup; filled: number; word: string; at: At }): ReactNode {
+  const world = useWorld();
+  const { snapshot } = world;
+  const buckets = useMemo(() => {
+    const index = statIndex(snapshot);
+    const bal = balance(snapshot);
+    return omenBuckets(snapshot, omen)
+      .map((bucket) => {
+        const source = bucket.mods ?? affix(snapshot, bucket.affix?.affixId ?? "")?.stats ?? [];
+        const lines = parseRolledMods(source as Record<string, unknown>[]).map((mod) => {
+          const exact = rollToExact(mod, bucket.statPercent, omen.itemLevel, index.shapeOf(mod.statId), bal);
+          const name = statName(snapshot, mod.statId);
+          const suffix = mod.type === "PERCENT" ? `% Increased ${name}` : mod.type === "MORE" ? `% More ${name}` : ` ${name}`;
+          return { text: `${exact.value >= 0 ? "+" : ""}${smart(exact.value)}${suffix}`, good: exact.value >= 0 };
+        });
+        return { pieces: bucket.pieces, lines };
+      })
+      .sort((a, b) => a.pieces - b.pieces);
+  }, [snapshot, omen]);
+  const icon = world.icon(OMEN_ICON);
+  const requires = Object.entries(omen.requires ?? {}).filter(([, n]) => n > 0);
+
+  return (
+    <div className={`item-window rarity-${omen.rarity.toLowerCase()} floating`} style={floatingStyle(at, ITEM_CARD)}>
+      <div className="tt-header">
+        <div className="tt-icon-frame">{icon === null ? null : <img className="tt-spell-icon" src={icon} alt="" />}</div>
+        <div className="tt-title-container">
+          <div className="tt-title">{omenName(snapshot, omen.id)}</div>
+          <div className="tt-subtitle">
+            {word} · {filled} piece{filled === 1 ? "" : "s"} worn
+          </div>
+        </div>
+      </div>
+      <div className="tt-divider" />
+      {requires.length > 0 || (omen.slotRequirements ?? []).length > 0 ? (
+        <>
+          <div className="tt-section tt-facts">
+            {requires.map(([type, count]) => (
+              <FactRow key={type} fact={{ label: `${humanise(type.toLowerCase())} pieces`, value: String(count) }} />
+            ))}
+            {(omen.slotRequirements ?? []).map((req, i) => (
+              <FactRow key={i} fact={{ label: slotName(snapshot, req.slot), value: humanise(req.rarityType.toLowerCase()) }} />
+            ))}
+          </div>
+          <div className="tt-divider" />
+        </>
+      ) : null}
+      <div className="tt-section tt-stats">
+        {buckets.map((bucket, i) => (
+          <div key={i} className={`tt-category-group${filled >= bucket.pieces ? "" : " dormant"}`}>
+            <div className="tt-category-title unique">
+              {bucket.pieces} pieces:
+              {filled >= bucket.pieces ? null : <div className="tt-dormant">not reached</div>}
+            </div>
+            {bucket.lines.length === 0 ? (
+              <div className="tt-line">
+                <span className="stat-text">No stats</span>
+              </div>
+            ) : (
+              bucket.lines.map((line, j) => (
+                <div key={j} className={`tt-line${line.good ? "" : " worse"}`}>
+                  {formattedLine(line.text)}
+                </div>
+              ))
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="tt-divider" />
+      <div className="tt-footer">
+        <div className="tt-rarity-label">
+          {omen.rarity} {word}
+        </div>
+        <div className="tt-subtitle">Item Level {omen.itemLevel}</div>
+      </div>
     </div>
   );
 }

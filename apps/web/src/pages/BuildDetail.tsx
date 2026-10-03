@@ -9,6 +9,7 @@ import {
   activeSupportLinks,
   baseGearType,
   CATEGORY,
+  countOmenPieces,
   entry,
   gearRarity,
   learnedSpells,
@@ -16,12 +17,20 @@ import {
   isAuraEnabled,
   isSkillEnabled,
   itemName,
+  jewelItemId,
+  jewelName,
   nodeKey,
+  omenBuckets,
+  omenName,
   perkName,
   slotName,
   stageDoc,
   stageList,
+  text,
   TREE_KEYS,
+  uniqueName,
+  WATCHER_EYE_UNIQUE,
+  wornItems,
   type BuildDoc,
   type BuildStage,
   type TreeKey,
@@ -46,7 +55,7 @@ import { useParams } from "react-router";
 import { api } from "../api.ts";
 import { OpenInCob } from "../components/OpenInCob.tsx";
 import { StatsSidebar } from "../components/StatsSidebar.tsx";
-import { GemWindow, ItemWindow, SpellWindow } from "../components/Tooltips.tsx";
+import { GemWindow, ItemWindow, JewelWindow, OmenWindow, SpellWindow } from "../components/Tooltips.tsx";
 import { ago, versionLabel } from "../format.ts";
 import { useGame, WhenLoaded } from "../game-data.tsx";
 import { nameOf, Thing, ThingIcon } from "../names.tsx";
@@ -300,12 +309,40 @@ function GemChip({ kind, id, roll, level }: { kind: "support" | "augment"; id: s
 }
 
 function Gear({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild | undefined }): ReactNode {
-  const { snapshot } = useWorld();
+  const world = useWorld();
+  const { snapshot } = world;
   const game = useGame();
   const gear = doc.gear ?? [];
-  if (gear.length === 0) return <p className="faint">No gear.</p>;
+  const jewels = doc.jewels ?? [];
+  // The Augments the build runs, which decide whether a Watcher's Eye line counts.
+  const augments = useMemo(() => new Set((doc.auras ?? []).filter(isAuraEnabled).map((a) => a.id)), [doc.auras]);
+  // The pack renames the omen to "Codex".
+  const word = text(snapshot, "item.mmorpg.omen") ?? "Omen";
+  const omen = doc.omen;
+  const filled = useMemo(
+    () => (omen === undefined ? 0 : countOmenPieces(snapshot, wornItems(snapshot, gear), omen, doc.character.level)),
+    [snapshot, gear, omen, doc.character.level],
+  );
+  if (gear.length === 0 && jewels.length === 0 && omen === undefined) return <p className="faint">No gear.</p>;
+  const needed = omen === undefined ? 0 : Math.min(...omenBuckets(snapshot, omen).map((b) => b.pieces));
+  const omenIcon = omen === undefined ? null : world.icon("mmorpg:textures/gui/prophecy/omen.png");
   return (
+    <>
     <ul className="gear">
+      {omen === undefined ? null : (
+        <li>
+          <Hover render={(at) => <OmenWindow omen={omen} filled={filled} word={word} at={at} />}>
+            {omenIcon === null ? <span className="thing-icon blank" /> : <img className="thing-icon" src={omenIcon} width={28} height={28} alt="" />}
+            <span className="gear-text">
+              <span className={`item-name rarity-${omen.rarity}`}>{omenName(snapshot, omen.id)}</span>
+              <span className="faint small">
+                {word} · {omen.rarity} · {filled} piece{filled === 1 ? "" : "s"}
+                {filled >= needed ? ", active" : ", not active yet"}
+              </span>
+            </span>
+          </Hover>
+        </li>
+      )}
       {gear.map((item, i) => {
         const slot = baseGearType(snapshot, item.base)?.gearSlot;
         return (
@@ -324,6 +361,32 @@ function Gear({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild | undefin
         );
       })}
     </ul>
+    {jewels.length > 0 ? (
+      <>
+        <h3>Jewels</h3>
+        <ul className="gear">
+          {jewels.map((jewel, i) => {
+            const icon = world.itemIcon(jewelItemId(jewel));
+            const unique = jewel.unique === undefined || jewel.unique.id === WATCHER_EYE_UNIQUE ? undefined : uniqueName(snapshot, jewel.unique.id);
+            return (
+              <li key={i}>
+                <Hover render={(at) => <JewelWindow jewel={jewel} level={doc.character.level} augments={augments} at={at} />}>
+                  {icon === null ? <span className="thing-icon blank" /> : <img className="thing-icon" src={icon} width={28} height={28} alt="" />}
+                  <span className="gear-text">
+                    <span className={`item-name rarity-${jewel.rarity}`}>{jewelName(snapshot, jewel)}</span>
+                    <span className="faint small">
+                      {unique === undefined ? "" : `${unique} · `}
+                      {jewel.rarity} · lvl {jewel.itemLevel}
+                    </span>
+                  </span>
+                </Hover>
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    ) : null}
+    </>
   );
 }
 
