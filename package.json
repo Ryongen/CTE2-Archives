@@ -18,10 +18,11 @@
   "scripts": {
     "build:vendor": "npm run -w @cte2/extractor build && npm run -w @cte2/schema build && npm run -w @cte2/engine build && npm run -w @cte2/view build",
     "catalogue-data": "node tools/sync-catalogue-data.mjs",
-    "dev:api": "npm run -w @cob/api dev",
-    "dev:web": "npm run -w @cob/web dev",
+    "dev:api": "npm run -w @cob/api dev --",
+    "dev:web": "npm run -w @cob/web dev --",
     "typecheck": "npm run build:vendor && npm run -ws --if-present typecheck",
-    "test": "npm run build:vendor && npm run -w @cob/shared test && npm run -w @cob/api test"
+    "test": "npm run build:vendor && npm run -w @cob/shared test && npm run -w @cob/api test",
+    "index": "npm run -w @cob/indexer start --"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

@@ -217,6 +217,10 @@ main {
   border-color: var(--good);
   color: var(--good);
 }
+.badge.version {
+  text-transform: none;
+  letter-spacing: 0;
+}
 
 /* --- the list ------------------------------------------------------------------------------ */
 
@@ -565,6 +569,9 @@ p.supports {
 .form textarea {
   font-family: var(--sans);
   font-size: 13px;
+}
+.turnstile {
+  min-height: 65px;
 }
 .form > button {
   align-self: flex-start;

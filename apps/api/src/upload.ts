@@ -14,7 +14,6 @@ import {
   samePackVersion,
   stageDoc,
   stageList,
-  summarizeBuild,
   summaryFacets,
   type BuildDoc,
   type BuildSummary,
@@ -22,12 +21,12 @@ import {
   type IndexData,
   type ReadBuild,
 } from "@cte2/schema";
-import type { UploadRequest, Visibility } from "@cob/shared";
+import { catalogueSummary, normaliseVersion, type UploadRequest, type Visibility } from "@cob/shared";
 
 export class UploadError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 403 | 413 | 503 = 400,
+    readonly status: 400 | 403 | 413 | 429 | 503 = 400,
   ) {
     super(message);
   }
@@ -81,7 +80,7 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
   const { doc, observed } = read;
   const main = mainStage(doc);
   // Summarise the stage the build is about, not whichever one happened to be open.
-  const summary = summarizeBuild(main === undefined ? doc : stageDoc(doc, main), index);
+  const summary = catalogueSummary(main === undefined ? doc : stageDoc(doc, main), index);
   const mainId = main?.id;
 
   const stages = stageList(doc).map((stage, position): PreparedStage => {
@@ -92,7 +91,7 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
       name: clip(stage.name, MAX_TITLE) || `Stage ${position + 1}`,
       level,
       isMain: mainId === undefined ? stage.main === true : stage.id === mainId,
-      mainSkill: summarizeBuild(stageDoc(doc, stage), index).mainSkill ?? null,
+      mainSkill: catalogueSummary(stageDoc(doc, stage), index).mainSkill ?? null,
     };
   });
 
@@ -105,8 +104,9 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
     summary,
     facets: summaryFacets(summary),
     stages,
-    mnsVersion: doc.meta?.mineAndSlashVersion ?? null,
-    packVersion: doc.meta?.packVersion ?? null,
+    mnsVersion: normaliseVersion(doc.meta?.mineAndSlashVersion),
+    // The exporter can't see the modpack's version, so the uploader may say it instead.
+    packVersion: clip(packVersionOf(doc.meta?.packVersion) ?? packVersionOf(request.packVersion) ?? "", 40) || null,
   };
 }
 
@@ -116,6 +116,11 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
  */
 export function contentKey(doc: BuildDoc): string {
   return JSON.stringify(doc);
+}
+
+function packVersionOf(version: string | undefined): string | undefined {
+  const v = version?.trim();
+  return v === undefined || v === "" || v.toLowerCase() === "unknown" ? undefined : v;
 }
 
 function clip(text: string, max: number): string {

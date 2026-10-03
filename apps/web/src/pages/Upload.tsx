@@ -13,6 +13,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { api } from "../api.ts";
+import { Turnstile, turnstileEnabled } from "../components/Turnstile.tsx";
 
 export function UploadPage(): ReactNode {
   const [text, setText] = useState("");
@@ -20,11 +21,24 @@ export function UploadPage(): ReactNode {
   const [problem, setProblem] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
+  const [packVersion, setPackVersion] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   const upload = useMutation({
-    mutationFn: () => api.upload({ build: text, title, notes, visibility }),
+    mutationFn: () => api.upload({
+        build: text,
+        title,
+        notes,
+        visibility,
+        ...(packVersion.trim() === "" ? {} : { packVersion: packVersion.trim() }),
+        turnstileToken: captcha ?? undefined,
+      }),
+    // The token was spent on the failed attempt, so get a new one for the retry.
+    onError: () => setCaptchaReset((n) => n + 1),
   });
+  const waitingForCaptcha = turnstileEnabled && captcha === null;
 
   const take = async (next: string) => {
     setText(next);
@@ -87,7 +101,8 @@ export function UploadPage(): ReactNode {
         <p className="good">
           Level {read.doc.character.level} build
           {read.observed === null ? "" : ", captured in-game"}
-          {(read.doc.stages?.length ?? 0) > 1 ? `, ${read.doc.stages!.length} stages` : ""}.
+          {(read.doc.stages?.length ?? 0) > 1 ? `, ${read.doc.stages!.length} stages` : ""}
+          {read.doc.meta?.mineAndSlashVersion ? `, Mine and Slash ${read.doc.meta.mineAndSlashVersion}` : ", no game version recorded"}.
         </p>
       )}
 
@@ -100,17 +115,35 @@ export function UploadPage(): ReactNode {
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} placeholder="How it plays, what to level with, anything else" />
         </label>
+        {knownPackVersion(read) ? null : (
+          <label>
+            Modpack version
+            <input
+              value={packVersion}
+              onChange={(e) => setPackVersion(e.target.value)}
+              maxLength={40}
+              placeholder="The Craft to Exile 2 version you played it on, e.g. 1.4.2"
+            />
+          </label>
+        )}
         <label className="row">
           <input type="checkbox" checked={visibility === "unlisted"} onChange={(e) => setVisibility(e.target.checked ? "unlisted" : "public")} />
           Unlisted: only people with the link can see it
         </label>
-        <button className="primary" disabled={read === null || upload.isPending} onClick={() => upload.mutate()}>
+        <Turnstile onToken={setCaptcha} resetKey={captchaReset} />
+        <button className="primary" disabled={read === null || waitingForCaptcha || upload.isPending} onClick={() => upload.mutate()}>
           {upload.isPending ? "Uploading…" : "Publish"}
         </button>
         {upload.error ? <p className="error">{upload.error.message}</p> : null}
       </div>
     </div>
   );
+}
+
+/** The exporter writes `unknown` because the game can't see the modpack's version. */
+function knownPackVersion(read: ReadBuild | null): boolean {
+  const v = read?.doc.meta?.packVersion?.trim().toLowerCase();
+  return v !== undefined && v !== "" && v !== "unknown";
 }
 
 function Uploaded({ result }: { result: UploadResponse }): ReactNode {

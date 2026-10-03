@@ -13,3 +13,10 @@ export function ago(iso: string): string {
   const count = Math.floor(seconds / unit[0]);
   return `${count} ${unit[1]}${count === 1 ? "" : "s"} ago`;
 }
+
+/** Which patch a build is from: the modpack's version when known, and Mine and Slash's. */
+export function versionLabel(mnsVersion: string | null, packVersion: string | null): string {
+  const parts = [packVersion === null ? null : `CtE2 ${packVersion}`, mnsVersion === null ? null : `M&S ${mnsVersion}`];
+  const known = parts.filter((p) => p !== null);
+  return known.length === 0 ? "Unknown version" : known.join(" · ");
+}

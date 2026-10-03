@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { formatFilters, parseFilters, toggleFacet } from "./filters.ts";
+import { formatFilters, parseFilters, toggleFacet, toggleVersion } from "./filters.ts";
 
 test("filters round-trip through a query string", () => {
   const params = new URLSearchParams("skill=fireball,frost_nova&ascendancy=sanguimancer&levelMin=40&sort=dps&page=2");
@@ -29,4 +29,12 @@ test("toggling a facet value resets the page and drops empty kinds", () => {
   filters = toggleFacet(toggleFacet(filters, "skill", "a"), "skill", "b");
   assert.equal(filters.facets.skill, undefined);
   assert.equal(formatFilters(filters).toString(), "");
+});
+
+test("versions round-trip and toggle like facet values", () => {
+  let filters = parseFilters(new URLSearchParams("version=6.4.13,unknown"));
+  assert.deepEqual(filters.versions, ["6.4.13", "unknown"]);
+  assert.deepEqual(parseFilters(formatFilters(filters)), filters);
+  filters = toggleVersion(toggleVersion(filters, "6.4.13"), "unknown");
+  assert.equal(filters.versions, undefined);
 });

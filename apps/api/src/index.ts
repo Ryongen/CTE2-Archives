@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import type { BuildSummary, FacetKind, IndexData } from "@cte2/schema";
+import { summaryFacets, type BuildSummary, type FacetKind, type IndexData } from "@cte2/schema";
 import {
   MAX_UPLOAD_BYTES,
   PAGE_SIZE,
@@ -9,14 +9,26 @@ import {
   type BuildDetail,
   type BuildListResponse,
   type BuildRow,
+  type DerivedRequest,
   type FacetCount,
+  type PendingResponse,
   type UploadRequest,
   type UploadResponse,
 } from "@cob/shared";
 
 import type { Env } from "./env.ts";
 import { newId, newToken, sha256Hex } from "./ids.ts";
-import { MAIN_DERIVED, countQuery, facetQuery, pickedKinds, rowsQuery, whereClause, type Query } from "./list.ts";
+import {
+  MAIN_DERIVED,
+  byVersion,
+  countQuery,
+  facetQuery,
+  pickedKinds,
+  rowsQuery,
+  versionQuery,
+  whereClause,
+  type Query,
+} from "./list.ts";
 import { choosePack, contentKey, prepareBuild, readUpload, UploadError } from "./upload.ts";
 
 /** D1 refuses a statement with more than 100 bound parameters. */
@@ -44,6 +56,13 @@ app.get("/packs", async (c) => {
 });
 
 app.post("/builds", async (c) => {
+  // Before anything else, so a flood costs one counter check per request.
+  if (c.env.UPLOAD_LIMIT) {
+    const key = c.req.header("cf-connecting-ip") ?? "unknown";
+    const { success } = await c.env.UPLOAD_LIMIT.limit({ key });
+    if (!success) throw new UploadError("Too many uploads, wait a minute and try again", 429);
+  }
+
   const declared = Number(c.req.header("content-length") ?? 0);
   if (declared > MAX_UPLOAD_BYTES) throw new UploadError("Build is too large", 413);
   const text = await c.req.text();
@@ -131,9 +150,10 @@ app.get("/builds", async (c) => {
   const db = c.env.DB;
   const bind = (q: Query) => db.prepare(q.sql).bind(...q.params);
   const picked = pickedKinds(filters);
-  const [rows, count, everyKind, ...perKind] = await db.batch([
+  const [rows, count, versions, everyKind, ...perKind] = await db.batch([
     bind(rowsQuery(filters)),
     bind(countQuery(filters)),
+    bind(versionQuery(filters)),
     bind(facetQuery(filters)),
     ...picked.map((kind) => bind(facetQuery(filters, kind))),
   ]);
@@ -156,6 +176,9 @@ app.get("/builds", async (c) => {
     page: filters.page,
     pageSize: PAGE_SIZE,
     facets,
+    versions: (versions!.results as { value: string; n: number }[])
+      .map((r) => ({ value: r.value, count: r.n }))
+      .sort((a, b) => byVersion(a.value, b.value)),
   } satisfies BuildListResponse);
 });
 
@@ -184,7 +207,6 @@ app.get("/builds/:id", async (c) => {
   return c.json({
     ...toBuildRow(row),
     notes: row.notes_md,
-    packVersion: row.pack_version,
     updatedAt: row.updated_at,
     summary: JSON.parse(row.summary) as BuildSummary,
     stages: (stages!.results as StageDbRow[]).map((st) => ({
@@ -209,6 +231,90 @@ app.get("/builds/:id/doc", async (c) => {
   return c.body(row.doc, 200, { "content-type": "application/json; charset=utf-8" });
 });
 
+// --- The indexer ----------------------------------------------------------------------------------
+// `apps/indexer` runs the engine where there's CPU to spare and hands the numbers back here.
+
+app.use("/internal/*", async (c, next) => {
+  const token = c.env.INDEXER_TOKEN;
+  if (!token || c.req.header("authorization") !== `Bearer ${token}`) return c.json({ error: "Not allowed" }, 401);
+  await next();
+});
+
+/**
+ * Builds the indexer should (re)compute: never indexed, or indexed against a pack other than
+ * `?pack=`, the one the indexer has loaded, so a pack update recomputes everything once.
+ */
+app.get("/internal/pending", async (c) => {
+  const pack = c.req.query("pack") ?? "";
+  const limit = Math.min(50, Math.max(1, Number(c.req.query("limit")) || 20));
+  const { results } = await c.env.DB.prepare(
+    `SELECT b.id, x.doc FROM builds b JOIN build_docs x ON x.build_id = b.id
+    WHERE b.status = 'pending'
+      OR (b.status = 'indexed' AND EXISTS (
+        SELECT 1 FROM build_derived d WHERE d.build_id = b.id AND d.snapshot_pack != ?))
+    ORDER BY b.created_at LIMIT ?`,
+  )
+    .bind(pack, limit)
+    .all<{ id: string; doc: string }>();
+  return c.json({ builds: results } satisfies PendingResponse);
+});
+
+app.put("/internal/builds/:id/derived", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<DerivedRequest>();
+  const db = c.env.DB;
+  const exists = await db.prepare("SELECT 1 AS x FROM builds WHERE id = ?").bind(id).first();
+  if (exists === null) return c.json({ error: "No such build" }, 404);
+
+  if (body.status === "invalid") {
+    await db.batch([
+      db.prepare("UPDATE builds SET status = 'invalid', updated_at = ? WHERE id = ? AND status != 'hidden'").bind(now(), id),
+      db.prepare("DELETE FROM build_derived WHERE build_id = ?").bind(id),
+    ]);
+    return c.json({ ok: true });
+  }
+
+  const s = body.summary;
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE builds SET status = CASE status WHEN 'hidden' THEN 'hidden' ELSE 'indexed' END,
+          main_skill = ?, ascendancy = ?, summary = ?, updated_at = ? WHERE id = ?`,
+      )
+      .bind(s.mainSkill ?? null, s.ascendancy ?? null, JSON.stringify(s), now(), id),
+    db.prepare("DELETE FROM build_facets WHERE build_id = ?").bind(id),
+    ...summaryFacets(s).map((f) =>
+      db.prepare("INSERT OR IGNORE INTO build_facets (build_id, kind, value) VALUES (?, ?, ?)").bind(id, f.kind, f.value),
+    ),
+    db.prepare("DELETE FROM build_derived WHERE build_id = ?").bind(id),
+    ...body.stages.map((st) =>
+      db
+        .prepare(
+          `INSERT INTO build_derived (build_id, stage_id, snapshot_pack, dps, full_dps, ehp, life, es, mana,
+            res_fire, res_cold, res_light, res_chaos, json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          id,
+          st.stageId,
+          body.snapshotPack,
+          st.dps,
+          st.fullDps,
+          st.ehp,
+          st.life,
+          st.es,
+          st.mana,
+          st.resFire,
+          st.resCold,
+          st.resLight,
+          st.resChaos,
+          JSON.stringify(st.json),
+        ),
+    ),
+  ]);
+  return c.json({ ok: true });
+});
+
 export default app;
 
 // ---------------------------------------------------------------------------
@@ -223,6 +329,7 @@ type ListRow = {
   ascendancy: string | null;
   main_skill: string | null;
   mns_version: string | null;
+  pack_version: string | null;
   status: BuildRow["status"];
   created_at: string;
   dps: number | null;
@@ -235,7 +342,6 @@ type ListRow = {
 
 type DetailExtras = {
   notes_md: string;
-  pack_version: string | null;
   updated_at: string;
   summary: string;
   has_observed: number | null;
@@ -254,11 +360,16 @@ function toBuildRow(r: ListRow): BuildRow {
     ascendancy: r.ascendancy,
     mainSkill: r.main_skill,
     mnsVersion: r.mns_version,
+    packVersion: r.pack_version,
     uniques: r.uniques === null ? [] : r.uniques.split(","),
     status: r.status,
     createdAt: r.created_at,
     derived: r.derived_id === null ? null : { dps: r.dps, ehp: r.ehp, life: r.life, es: r.es },
   };
+}
+
+function now(): string {
+  return new Date().toISOString();
 }
 
 async function verifyTurnstile(secret: string, token: string | undefined, ip: string | undefined): Promise<boolean> {

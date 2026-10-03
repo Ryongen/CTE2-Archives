@@ -27,7 +27,7 @@ import { useParams } from "react-router";
 
 import { api } from "../api.ts";
 import { OpenInCob } from "../components/OpenInCob.tsx";
-import { ago } from "../format.ts";
+import { ago, versionLabel } from "../format.ts";
 import { useGame, WhenLoaded } from "../game-data.tsx";
 import { nameOf, Thing, ThingIcon } from "../names.tsx";
 
@@ -60,7 +60,10 @@ export function BuildDetailPage(): ReactNode {
             Level {shown.character.level}
             {build.ascendancy === null ? "" : ` ${nameOf(game, "ascendancy", build.ascendancy)}`}
             {build.mainSkill === null ? "" : ` · ${nameOf(game, "skill", build.mainSkill)}`}
-            {build.mnsVersion === null ? "" : ` · M&S ${build.mnsVersion}`} · uploaded {ago(build.createdAt)}
+            {" "}· uploaded {ago(build.createdAt)}
+            <span className="badge version" title="The game version this build was made on">
+              {versionLabel(build.mnsVersion, build.packVersion)}
+            </span>
             {build.kind === "capture" ? <span className="badge capture">In-game capture</span> : <span className="badge planned">Planned</span>}
           </p>
         </div>

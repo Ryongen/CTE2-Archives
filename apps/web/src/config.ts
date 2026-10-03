@@ -11,3 +11,6 @@ export const COB_SITE = (import.meta.env.VITE_COB_SITE ?? "https://ryongen.githu
   /\/?$/,
   "/",
 );
+
+/** Turnstile site key for uploads. Unset in local dev, where the API doesn't check either. */
+export const TURNSTILE_SITE_KEY: string | undefined = import.meta.env.VITE_TURNSTILE_SITE_KEY || undefined;

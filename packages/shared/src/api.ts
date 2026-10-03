@@ -19,6 +19,8 @@ export type UploadRequest = {
   title?: string;
   notes?: string;
   visibility?: Visibility;
+  /** The Craft to Exile 2 version, for a build whose document doesn't record one. */
+  packVersion?: string;
   /** Turnstile response token; required when the API has a Turnstile secret configured. */
   turnstileToken?: string;
 };
@@ -39,7 +41,10 @@ export type BuildRow = {
   level: number;
   ascendancy: string | null;
   mainSkill: string | null;
+  /** The Mine and Slash version, `6.4.13`; null when the build doesn't say. */
   mnsVersion: string | null;
+  /** The Craft to Exile 2 modpack version, when the uploader or exporter knew it. */
+  packVersion: string | null;
   uniques: string[];
   status: BuildStatus;
   createdAt: string;
@@ -63,6 +68,8 @@ export type BuildListResponse = {
   pageSize: number;
   /** Per kind, the most common values in the filtered set. See `GET /builds` for how. */
   facets: Partial<Record<FacetKind, FacetCount[]>>;
+  /** Builds per Mine and Slash version, counted the way a picked facet kind is. */
+  versions: FacetCount[];
 };
 
 export type BuildStageRow = {
@@ -75,7 +82,6 @@ export type BuildStageRow = {
 
 export type BuildDetail = BuildRow & {
   notes: string;
-  packVersion: string | null;
   updatedAt: string;
   summary: BuildSummary;
   stages: BuildStageRow[];
@@ -84,3 +90,40 @@ export type BuildDetail = BuildRow & {
 };
 
 export type ApiError = { error: string };
+
+// --- The indexer's side ------------------------------------------------------------------------
+
+/** `GET /internal/pending`: builds waiting for the engine, oldest first. */
+export type PendingResponse = {
+  builds: { id: string; doc: string }[];
+};
+
+/** One stage's numbers, as the indexer computed them. Columns of `build_derived`. */
+export type DerivedStage = {
+  stageId: string;
+  dps: number | null;
+  fullDps: number | null;
+  ehp: number | null;
+  life: number | null;
+  es: number | null;
+  mana: number | null;
+  resFire: number | null;
+  resCold: number | null;
+  resLight: number | null;
+  resChaos: number | null;
+  /** Whatever else is worth keeping: legality, the problem count, the DPS terms. */
+  json: unknown;
+};
+
+/** `PUT /internal/builds/:id/derived`. */
+export type DerivedRequest =
+  | {
+      status: "indexed";
+      /** The pack's `mineAndSlashVersion` the numbers were computed against. */
+      snapshotPack: string;
+      /** Rewritten with the engine's main skill, which can differ from the upload-time guess. */
+      summary: BuildSummary;
+      stages: DerivedStage[];
+    }
+  /** The engine couldn't compute it at all. Such a build leaves the list. */
+  | { status: "invalid"; reason: string };

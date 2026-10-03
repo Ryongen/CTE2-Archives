@@ -1,0 +1,17 @@
+{
+  "name": "@cob/indexer",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Runs the engine over pending builds and hands the numbers to the API. Run by a GitHub Actions cron.",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cob/shared": "0.0.1",
+    "@cte2/engine": "0.0.1",
+    "@cte2/extractor": "0.0.1",
+    "@cte2/schema": "0.0.1"
+  }
+}

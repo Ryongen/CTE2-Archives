@@ -9,7 +9,7 @@
  */
 
 import { FACET_KINDS, type FacetKind } from "@cte2/schema";
-import { PAGE_SIZE, type BuildFilters } from "@cob/shared";
+import { PAGE_SIZE, UNKNOWN_VERSION, type BuildFilters } from "@cob/shared";
 
 /** Values shown per facet kind in the sidebar. */
 export const FACET_LIMIT = 30;
@@ -27,8 +27,8 @@ const ORDER: Record<BuildFilters["sort"], string> = {
   ehp: "d.ehp DESC NULLS LAST, b.created_at DESC",
 };
 
-/** The WHERE clause for `filters`, leaving out the facet kind `except` when given. */
-export function whereClause(filters: BuildFilters, except?: FacetKind): Query {
+/** The WHERE clause for `filters`, leaving out the facet kind (or the versions) `except` when given. */
+export function whereClause(filters: BuildFilters, except?: FacetKind | "version"): Query {
   const parts = ["b.visibility = 'public'", "b.status IN ('pending', 'indexed')"];
   const params: (string | number)[] = [];
   for (const kind of FACET_KINDS) {
@@ -38,6 +38,14 @@ export function whereClause(filters: BuildFilters, except?: FacetKind): Query {
       `b.id IN (SELECT build_id FROM build_facets WHERE kind = ? AND value IN (${values.map(() => "?").join(", ")}))`,
     );
     params.push(kind, ...values);
+  }
+  const versions = except === "version" ? [] : (filters.versions ?? []);
+  if (versions.length > 0) {
+    const known = versions.filter((v) => v !== UNKNOWN_VERSION);
+    const either = known.length > 0 ? [`b.mns_version IN (${known.map(() => "?").join(", ")})`] : [];
+    if (known.length < versions.length) either.push("b.mns_version IS NULL");
+    parts.push(`(${either.join(" OR ")})`);
+    params.push(...known);
   }
   if (filters.levelMin !== undefined) {
     parts.push("b.level >= ?");
@@ -58,7 +66,7 @@ export function rowsQuery(filters: BuildFilters): Query {
   const where = whereClause(filters);
   return {
     sql: `SELECT b.id, b.kind, b.source, b.verified, b.title, b.level, b.ascendancy, b.main_skill,
-        b.mns_version, b.status, b.created_at, d.dps, d.ehp, d.life, d.es, d.build_id AS derived_id,
+        b.mns_version, b.pack_version, b.status, b.created_at, d.dps, d.ehp, d.life, d.es, d.build_id AS derived_id,
         (SELECT group_concat(f.value, ',') FROM build_facets f WHERE f.build_id = b.id AND f.kind = 'unique') AS uniques
       FROM builds b ${MAIN_DERIVED}
       WHERE ${where.sql}
@@ -90,6 +98,23 @@ export function facetQuery(filters: BuildFilters, kind?: FacetKind): Query {
       ) WHERE rn <= ?`,
     params: [...where.params, ...(kind === undefined ? [] : [kind]), FACET_LIMIT],
   };
+}
+
+/** Builds per version, under every filter but the version one. Unordered: see `byVersion`. */
+export function versionQuery(filters: BuildFilters): Query {
+  const where = whereClause(filters, "version");
+  return {
+    sql: `SELECT COALESCE(b.mns_version, '${UNKNOWN_VERSION}') AS value, COUNT(*) AS n
+      FROM builds b WHERE ${where.sql}
+      GROUP BY value`,
+    params: where.params,
+  };
+}
+
+/** Newest version first, comparing `6.4.13` and `6.4.9` as numbers; unknown last. */
+export function byVersion(a: string, b: string): number {
+  if (a === UNKNOWN_VERSION || b === UNKNOWN_VERSION) return Number(a === UNKNOWN_VERSION) - Number(b === UNKNOWN_VERSION);
+  return b.localeCompare(a, "en", { numeric: true });
 }
 
 /** The kinds that need their own facet query, because something in them is picked. */

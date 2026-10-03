@@ -15,8 +15,13 @@ export const PAGE_SIZE = 50;
 /** Per kind, more values than this are ignored. D1 allows 100 bound parameters a query. */
 export const MAX_VALUES_PER_KIND = 10;
 
+/** The `version` value that matches builds which don't say what version they're from. */
+export const UNKNOWN_VERSION = "unknown";
+
 export type BuildFilters = {
   facets: Partial<Record<FacetKind, string[]>>;
+  /** Mine and Slash versions, OR'd, as `normaliseVersion` spells them, or {@link UNKNOWN_VERSION}. */
+  versions?: string[];
   levelMin?: number;
   levelMax?: number;
   /** Free text, matched against titles. */
@@ -35,11 +40,11 @@ export function isFacetKind(value: string): value is FacetKind {
 export function parseFilters(params: URLSearchParams): BuildFilters {
   const filters = emptyFilters();
   for (const kind of FACET_KINDS) {
-    const raw = params.get(kind);
-    if (raw === null) continue;
-    const values = [...new Set(raw.split(",").map((v) => v.trim()).filter((v) => v !== ""))];
+    const values = list(params.get(kind));
     if (values.length > 0) filters.facets[kind] = values.slice(0, MAX_VALUES_PER_KIND);
   }
+  const versions = list(params.get("version"));
+  if (versions.length > 0) filters.versions = versions.slice(0, MAX_VALUES_PER_KIND);
   const levelMin = wholeNumber(params.get("levelMin"));
   const levelMax = wholeNumber(params.get("levelMax"));
   if (levelMin !== undefined) filters.levelMin = levelMin;
@@ -59,6 +64,7 @@ export function formatFilters(filters: BuildFilters): URLSearchParams {
     const values = filters.facets[kind];
     if (values !== undefined && values.length > 0) params.set(kind, values.join(","));
   }
+  if (filters.versions !== undefined && filters.versions.length > 0) params.set("version", filters.versions.join(","));
   if (filters.levelMin !== undefined) params.set("levelMin", String(filters.levelMin));
   if (filters.levelMax !== undefined) params.set("levelMax", String(filters.levelMax));
   if (filters.q) params.set("q", filters.q);
@@ -75,6 +81,19 @@ export function toggleFacet(filters: BuildFilters, kind: FacetKind, value: strin
   if (next.length === 0) delete facets[kind];
   else facets[kind] = next;
   return { ...filters, facets, page: 1 };
+}
+
+/** Add or remove one version, as {@link toggleFacet} does for facet values. */
+export function toggleVersion(filters: BuildFilters, version: string): BuildFilters {
+  const current = filters.versions ?? [];
+  const next = current.includes(version) ? current.filter((v) => v !== version) : [...current, version];
+  const { versions: _, ...rest } = filters;
+  return next.length === 0 ? { ...rest, page: 1 } : { ...rest, versions: next, page: 1 };
+}
+
+function list(raw: string | null): string[] {
+  if (raw === null) return [];
+  return [...new Set(raw.split(",").map((v) => v.trim()).filter((v) => v !== ""))];
 }
 
 function wholeNumber(raw: string | null): number | undefined {

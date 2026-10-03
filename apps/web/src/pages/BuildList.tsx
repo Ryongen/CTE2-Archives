@@ -1,12 +1,22 @@
 import { FACET_KINDS, type FacetKind } from "@cte2/schema";
 import { compact } from "@cte2/view";
-import { formatFilters, parseFilters, toggleFacet, SORTS, type BuildFilters, type BuildRow, type FacetCount } from "@cob/shared";
+import {
+  formatFilters,
+  parseFilters,
+  toggleFacet,
+  toggleVersion,
+  SORTS,
+  UNKNOWN_VERSION,
+  type BuildFilters,
+  type BuildRow,
+  type FacetCount,
+} from "@cob/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { api } from "../api.ts";
-import { ago } from "../format.ts";
+import { ago, versionLabel } from "../format.ts";
 import { useGame } from "../game-data.tsx";
 import { KIND_LABEL, nameOf, Thing, ThingIcon } from "../names.tsx";
 
@@ -31,10 +41,19 @@ export function BuildListPage(): ReactNode {
       <aside className="sidebar">
         <SearchBox filters={filters} onChange={update} />
         <LevelRange filters={filters} onChange={update} />
+        <FacetGroup
+          title="Game version"
+          label={(v) => (v === UNKNOWN_VERSION ? "Unknown" : `M&S ${v}`)}
+          counts={data?.versions ?? []}
+          total={data?.total ?? 0}
+          picked={filters.versions ?? []}
+          onToggle={(value) => update(toggleVersion(filters, value))}
+        />
         {FACET_KINDS.map((kind) => (
           <FacetGroup
             key={kind}
-            kind={kind}
+            title={KIND_LABEL[kind]}
+            label={(value) => <Thing kind={kind} id={value} size={16} />}
             counts={data?.facets[kind] ?? []}
             total={data?.total ?? 0}
             picked={filters.facets[kind] ?? []}
@@ -111,7 +130,8 @@ function BuildTable({ rows }: { rows: BuildRow[] }): ReactNode {
                 <span>
                   <span className="title">{row.title}</span>
                   <span className="faint small">
-                    {row.ascendancy === null ? "No ascendancy" : <AscName id={row.ascendancy} />} · {ago(row.createdAt)}
+                    {row.ascendancy === null ? "No ascendancy" : <AscName id={row.ascendancy} />} ·{" "}
+                    {versionLabel(row.mnsVersion, row.packVersion)} · {ago(row.createdAt)}
                   </span>
                 </span>
               </Link>
@@ -146,13 +166,15 @@ function AscName({ id }: { id: string }): ReactNode {
 }
 
 function FacetGroup({
-  kind,
+  title,
+  label,
   counts,
   total,
   picked,
   onToggle,
 }: {
-  kind: FacetKind;
+  title: string;
+  label: (value: string) => ReactNode;
   counts: FacetCount[];
   total: number;
   picked: string[];
@@ -170,7 +192,7 @@ function FacetGroup({
   const scale = picked.length > 0 ? Math.max(1, ...counts.map((c) => c.count)) : total;
   return (
     <div className="facet">
-      <h3>{KIND_LABEL[kind]}</h3>
+      <h3>{title}</h3>
       <ul>
         {shown.map(({ value, count }) => {
           const on = picked.includes(value);
@@ -179,7 +201,7 @@ function FacetGroup({
             <li key={value}>
               <button className={on ? "on" : ""} onClick={() => onToggle(value)} title={value}>
                 <span className="bar" style={{ width: `${Math.min(100, pct)}%` }} />
-                <Thing kind={kind} id={value} size={16} />
+                {label(value)}
                 <span className="count">
                   {count}
                   {picked.length > 0 ? null : <span className="faint"> · {Math.round(pct)}%</span>}
@@ -200,16 +222,30 @@ function FacetGroup({
 
 function PickedChips({ filters, onChange }: { filters: BuildFilters; onChange: (f: BuildFilters) => void }): ReactNode {
   const game = useGame();
-  const chips = FACET_KINDS.flatMap((kind) => (filters.facets[kind] ?? []).map((value) => ({ kind, value })));
+  const chips = [
+    ...(filters.versions ?? []).map((v) => ({
+      key: `version:${v}`,
+      label: v === UNKNOWN_VERSION ? "Unknown version" : `M&S ${v}`,
+      next: () => toggleVersion(filters, v),
+    })),
+    ...FACET_KINDS.flatMap((kind) =>
+      (filters.facets[kind] ?? []).map((value) => ({
+        key: `${kind}:${value}`,
+        label: nameOf(game, kind, value),
+        next: () => toggleFacet(filters, kind, value),
+      })),
+    ),
+  ];
   if (chips.length === 0) return <span className="grow" />;
+  const { versions: _, ...rest } = filters;
   return (
     <span className="chips grow">
-      {chips.map(({ kind, value }) => (
-        <button key={`${kind}:${value}`} className="chip" onClick={() => onChange(toggleFacet(filters, kind, value))}>
-          {nameOf(game, kind, value)} ✕
+      {chips.map((chip) => (
+        <button key={chip.key} className="chip" onClick={() => onChange(chip.next())}>
+          {chip.label} ✕
         </button>
       ))}
-      <button className="chip clear" onClick={() => onChange({ ...filters, facets: {}, page: 1 })}>
+      <button className="chip clear" onClick={() => onChange({ ...rest, facets: {}, page: 1 })}>
         Clear all
       </button>
     </span>
