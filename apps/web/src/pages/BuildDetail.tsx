@@ -554,6 +554,12 @@ function TreePanel({ doc }: { doc: BuildDoc }): ReactNode {
   const graph = world.graph(tree);
   const allocated = useMemo(() => new Set((doc.tree?.[tree] ?? []).map(([row, col]) => nodeKey(row, col))), [doc, tree]);
   const keys = (Object.keys(TREE_KEYS) as TreeKey[]).filter((k) => (doc.tree?.[k] ?? []).length > 0);
+  // Open on the build's own start rather than the tree's centre. The canvas centres first and
+  // then applies `focus`, so this wins on load and on every tab switch.
+  const focus = useMemo(() => {
+    const start = [...allocated].find((key) => graph?.nodes.get(key)?.perk?.isEntry === true);
+    return start === undefined ? undefined : { key: start, seq: 0 };
+  }, [graph, allocated]);
 
   // The canvas zooms on the wheel, but React's wheel listener is passive and can't stop the page
   // scrolling along with it. A native, non-passive listener on the frame can.
@@ -592,7 +598,7 @@ function TreePanel({ doc }: { doc: BuildDoc }): ReactNode {
         {graph === undefined ? (
           <p className="faint">This pack has no {TREE_LABEL[tree].toLowerCase()} tree.</p>
         ) : (
-          <TreeCanvas graph={graph} allocated={allocated} highlighted={NONE} onAllocate={noop} onDeallocate={noop} onHover={setHover} />
+          <TreeCanvas graph={graph} allocated={allocated} highlighted={NONE} onAllocate={noop} onDeallocate={noop} onHover={setHover} focus={focus} />
         )}
       </div>
       {hover === null || card === undefined || frame === undefined
