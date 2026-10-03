@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=.env src/main.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "start:remote": "node --env-file=.env.remote src/main.ts"
   },
   "dependencies": {
     "@cob/shared": "0.0.1",

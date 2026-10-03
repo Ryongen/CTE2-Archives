@@ -22,7 +22,8 @@
     "dev:web": "npm run -w @cob/web dev --",
     "typecheck": "npm run build:vendor && npm run -ws --if-present typecheck",
     "test": "npm run build:vendor && npm run -w @cob/shared test && npm run -w @cob/api test",
-    "index": "npm run -w @cob/indexer start --"
+    "index": "npm run -w @cob/indexer start --",
+    "index:remote": "npm run -w @cob/indexer start:remote --"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
