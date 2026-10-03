@@ -49,7 +49,7 @@ import {
   type At,
   type HoverInfo,
 } from "@cte2/view";
-import { checkCapture, legalityOf, type CaptureCheck } from "@cob/shared";
+import { checkCapture, legalityOf, plainMessage, type CaptureCheck } from "@cob/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -248,16 +248,18 @@ function Numbers({ derived, check }: { derived: DerivedBuild; check: CaptureChec
 
 /**
  * What CoB's checks said, worded for someone copying the build. Errors make it illegal; the
- * "can't be made" warnings are items the game still honours but this pack won't craft again; the
- * rest is housekeeping and stays folded away.
+ * "can't be made" warnings are items the game still honours but this pack won't craft again. The
+ * other warnings are about CoB's own setup (an effect roll or a condition it had to guess), not
+ * the build, so they aren't shown here.
  */
 function Checks({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild }): ReactNode {
   const { snapshot } = useWorld();
-  const { errors, notMakeable, warnings } = legalityOf(derived.diagnostics);
-  if (errors.length + notMakeable.length + warnings.length === 0) return null;
+  const { errors, notMakeable } = legalityOf(derived.diagnostics);
+  if (errors.length + notMakeable.length === 0) return null;
 
   // `gear[3].runeword` means little to a reader; the item's name does.
   const where = (path: string): string => {
+    if (path.startsWith("omen")) return "Omen";
     const m = /^(gear|itemPool|jewels)\[(\d+)\]/.exec(path);
     if (m === null) return path;
     const i = Number(m[2]);
@@ -271,8 +273,8 @@ function Checks({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild }): Rea
   const list = (items: typeof errors): ReactNode => (
     <ul className="checks">
       {items.map((d, i) => (
-        <li key={i} title={d.code}>
-          <strong>{where(d.path)}</strong> {d.message}
+        <li key={i} title={d.message}>
+          <strong>{where(d.path)}</strong> {plainMessage(d)}
         </li>
       ))}
     </ul>
@@ -294,14 +296,6 @@ function Checks({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild }): Rea
           </p>
           {list(notMakeable)}
         </>
-      ) : null}
-      {warnings.length > 0 ? (
-        <details>
-          <summary className="faint small">
-            {warnings.length} other note{warnings.length === 1 ? "" : "s"}
-          </summary>
-          {list(warnings)}
-        </details>
       ) : null}
     </section>
   );

@@ -35,6 +35,29 @@ export type Legality = {
   warnings: Diagnostic[];
 };
 
+/**
+ * One line a player can read for each `NOT_MAKEABLE_CODES` warning. CoB's own messages are written
+ * for whoever maintains the validator (ids, class names, why it only warns), which is too much on
+ * a build page; the full message stays available as a tooltip.
+ */
+const NOT_MAKEABLE_WORDING: Readonly<Record<string, string>> = {
+  "runeword-wrong-slot": "Its runeword can't be put on this kind of item any more.",
+  "runeword-runes-mismatch": "Its runes no longer match its runeword's recipe.",
+  "too-many-sockets": "Has more sockets than can be added today.",
+  "quality-above-pack-ceiling": "Has more quality than the pack's currencies can reach.",
+  "affix-not-allowed-on-jewel": "Has an affix that no longer rolls on this jewel.",
+  "too-many-eye-lines": "Has more augment lines than the pack grants.",
+  "omen-below-drop-level": "This omen doesn't drop at that level any more.",
+  "omen-requirement-outside-band": "This omen's requirements are outside what drops today.",
+  "omen-slot-count-outside-band": "This omen's slot requirements are outside what drops today.",
+  "omen-affix-count-outside-band": "This omen has more or fewer affixes than drop today.",
+};
+
+/** The short wording for a diagnostic, or its own message when there isn't one. */
+export function plainMessage(d: Diagnostic): string {
+  return NOT_MAKEABLE_WORDING[d.code] ?? d.message;
+}
+
 export function legalityOf(diagnostics: readonly Diagnostic[]): Legality {
   const errors: Diagnostic[] = [];
   const notMakeable: Diagnostic[] = [];
