@@ -47,6 +47,7 @@ import {
   type At,
   type HoverInfo,
 } from "@cte2/view";
+import { legalityOf } from "@cob/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -126,6 +127,7 @@ function BuildBody({ doc, notes }: { doc: BuildDoc; notes: string }): ReactNode 
   return (
     <>
       {derived instanceof Error ? <p className="error">CoB couldn't compute this build: {derived.message}</p> : <Numbers derived={derived} />}
+      {ok === undefined ? null : <Checks doc={doc} derived={ok} />}
       <div className="detail-body">
         <div className="detail-main">
           <div className="columns">
@@ -186,7 +188,7 @@ function Numbers({ derived }: { derived: DerivedBuild }): ReactNode {
     basicProcDps: derived.basic?.procDps ?? 0,
   });
   const { pools, weakest } = derived.defence;
-  const problems = derived.diagnostics.filter((d) => d.severity === "error").length;
+  const { errors, notMakeable } = legalityOf(derived.diagnostics);
 
   return (
     <div className="figures">
@@ -196,18 +198,93 @@ function Numbers({ derived }: { derived: DerivedBuild }): ReactNode {
       <Figure label="Magic shield" value={compact(pools.magicShield)} />
       <Figure
         label="Legality"
-        value={derived.legal ? "Legal" : `${problems} problem${problems === 1 ? "" : "s"}`}
+        value={derived.legal ? "Legal" : `${errors.length} problem${errors.length === 1 ? "" : "s"}`}
         tone={derived.legal ? "good" : "bad"}
+        note={notMakeable.length === 0 ? undefined : "Can't be made in this version"}
       />
     </div>
   );
 }
 
-function Figure({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "good" | "bad" }): ReactNode {
+/**
+ * What CoB's checks said, worded for someone copying the build. Errors make it illegal; the
+ * "can't be made" warnings are items the game still honours but this pack won't craft again; the
+ * rest is housekeeping and stays folded away.
+ */
+function Checks({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild }): ReactNode {
+  const { snapshot } = useWorld();
+  const { errors, notMakeable, warnings } = legalityOf(derived.diagnostics);
+  if (errors.length + notMakeable.length + warnings.length === 0) return null;
+
+  // `gear[3].runeword` means little to a reader; the item's name does.
+  const where = (path: string): string => {
+    const m = /^(gear|itemPool|jewels)\[(\d+)\]/.exec(path);
+    if (m === null) return path;
+    const i = Number(m[2]);
+    if (m[1] === "jewels") {
+      const jewel = doc.jewels?.[i];
+      return jewel === undefined ? path : jewelName(snapshot, jewel);
+    }
+    const item = (m[1] === "gear" ? doc.gear : doc.itemPool)?.[i];
+    return item === undefined ? path : itemName(snapshot, item);
+  };
+  const list = (items: typeof errors): ReactNode => (
+    <ul className="checks">
+      {items.map((d, i) => (
+        <li key={i} title={d.code}>
+          <strong>{where(d.path)}</strong> {d.message}
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <section className="panel">
+      {errors.length > 0 ? (
+        <>
+          <h3 className="bad">Problems</h3>
+          {list(errors)}
+        </>
+      ) : null}
+      {notMakeable.length > 0 ? (
+        <>
+          <h3 className="warn">Can't be made in this version</h3>
+          <p className="faint small">
+            The game still applies these, so the build is legal, but the current pack won't craft them again.
+          </p>
+          {list(notMakeable)}
+        </>
+      ) : null}
+      {warnings.length > 0 ? (
+        <details>
+          <summary className="faint small">
+            {warnings.length} other note{warnings.length === 1 ? "" : "s"}
+          </summary>
+          {list(warnings)}
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
+function Figure({
+  label,
+  value,
+  hint,
+  tone,
+  note,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "good" | "bad";
+  note?: string;
+}): ReactNode {
   return (
     <div className="figure" title={hint}>
       <span className="label">{label}</span>
       <span className={`value ${tone ?? ""}`}>{value}</span>
+      {note === undefined ? null : <span className="note">{note}</span>}
     </div>
   );
 }
