@@ -46,7 +46,7 @@ app.onError((error, c) => {
   return c.json({ error: "Something went wrong" }, 500);
 });
 
-app.get("/", (c) => c.json({ name: "cob-codex", ok: true }));
+app.get("/", (c) => c.json({ name: "cte2-archives", ok: true }));
 
 app.get("/packs", async (c) => {
   const { results } = await c.env.DB.prepare(

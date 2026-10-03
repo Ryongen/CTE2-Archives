@@ -16,7 +16,7 @@ function Layout() {
     <div className="app">
       <header className="topbar">
         <NavLink to="/builds" className="brand">
-          CoB Codex
+          CTE2 Archives
         </NavLink>
         <nav>
           <NavLink to="/builds" end>
