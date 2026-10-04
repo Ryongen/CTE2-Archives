@@ -591,6 +591,14 @@ p.supports {
 .form > button {
   align-self: flex-start;
 }
+.danger {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.edit-link {
+  margin-left: 8px;
+  font-size: 11px;
+}
 .token {
   background: var(--bg-input);
   border: 1px solid var(--allocated);

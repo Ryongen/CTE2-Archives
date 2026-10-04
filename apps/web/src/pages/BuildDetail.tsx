@@ -53,7 +53,7 @@ import { checkCapture, legalityOf, plainMessage, type CaptureCheck } from "@cob/
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { api } from "../api.ts";
 import { OpenInCob } from "../components/OpenInCob.tsx";
@@ -103,6 +103,9 @@ export function BuildDetailPage(): ReactNode {
               {versionLabel(build.mnsVersion, build.packVersion)}
             </span>
             {build.kind === "capture" ? <span className="badge capture">In-game capture</span> : <span className="badge planned">Planned</span>}
+            <Link className="edit-link" to={`/builds/${build.id}/edit`} title="Change or delete this build (needs its edit token)">
+              Edit
+            </Link>
           </p>
         </div>
         <OpenInCob id={build.id} doc={doc.data} title={build.title} />

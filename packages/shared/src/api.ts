@@ -91,6 +91,33 @@ export type BuildDetail = BuildRow & {
 
 export type ApiError = { error: string };
 
+// --- Editing -----------------------------------------------------------------------------------
+// Sent with `Authorization: Bearer <token>`: the build's edit token, or the site's admin token.
+
+/** Who a token speaks for. Only an admin may hide a build. */
+export type EditRole = "owner" | "admin";
+
+/** `GET /builds/:id/manage`: what the edit form starts from. Works on hidden builds too. */
+export type BuildManage = {
+  id: string;
+  role: EditRole;
+  title: string;
+  notes: string;
+  visibility: Visibility;
+  packVersion: string | null;
+  hidden: boolean;
+};
+
+/** `PATCH /builds/:id`. Fields left out are kept; an empty `packVersion` clears it. */
+export type BuildEdit = {
+  title?: string;
+  notes?: string;
+  visibility?: Visibility;
+  packVersion?: string;
+  /** Admin only. Unhiding sends the build back to the indexer. */
+  hidden?: boolean;
+};
+
 // --- The indexer's side ------------------------------------------------------------------------
 
 /** `GET /internal/pending`: builds waiting for the engine, oldest first. */

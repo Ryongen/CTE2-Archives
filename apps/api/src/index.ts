@@ -7,7 +7,9 @@ import {
   PAGE_SIZE,
   parseFilters,
   type BuildDetail,
+  type BuildEdit,
   type BuildListResponse,
+  type BuildManage,
   type BuildRow,
   type DerivedRequest,
   type FacetCount,
@@ -16,6 +18,7 @@ import {
   type UploadResponse,
 } from "@cob/shared";
 
+import { bearer, editColumns, roleFor } from "./edit.ts";
 import type { Env } from "./env.ts";
 import { newId, newToken, sha256Hex } from "./ids.ts";
 import {
@@ -241,6 +244,72 @@ app.get("/builds/:id/observed", async (c) => {
     .first<{ observed: string }>();
   if (row === null) return c.json({ error: "No capture for this build" }, 404);
   return c.body(row.observed, 200, { "content-type": "application/json; charset=utf-8" });
+});
+
+// --- Editing --------------------------------------------------------------------------------------
+// The uploader's edit token, or the admin token, in `Authorization: Bearer`. See edit.ts.
+
+type ManageRow = {
+  id: string;
+  title: string;
+  notes_md: string;
+  visibility: BuildManage["visibility"];
+  pack_version: string | null;
+  status: BuildRow["status"];
+  edit_token_hash: string | null;
+};
+
+/** The build and what the caller may do to it; refuses outright when they may do nothing. */
+async function authorise(c: { env: Env; req: { param(name: "id"): string; header(name: string): string | undefined } }) {
+  const row = await c.env.DB.prepare(
+    "SELECT id, title, notes_md, visibility, pack_version, status, edit_token_hash FROM builds WHERE id = ?",
+  )
+    .bind(c.req.param("id"))
+    .first<ManageRow>();
+  if (row === null) throw new UploadError("No such build", 404);
+  const role = await roleFor(c.env, bearer(c.req.header("authorization")), row.edit_token_hash);
+  if (role === null) throw new UploadError("That token doesn't open this build", 401);
+  // An uploader's hidden build is gone as far as they're concerned.
+  if (role === "owner" && row.status === "hidden") throw new UploadError("No such build", 404);
+  return { row, role };
+}
+
+function toManage(row: ManageRow, role: BuildManage["role"]): BuildManage {
+  return {
+    id: row.id,
+    role,
+    title: row.title,
+    notes: row.notes_md,
+    visibility: row.visibility,
+    packVersion: row.pack_version,
+    hidden: row.status === "hidden",
+  };
+}
+
+app.get("/builds/:id/manage", async (c) => {
+  const { row, role } = await authorise(c);
+  return c.json(toManage(row, role));
+});
+
+app.patch("/builds/:id", async (c) => {
+  const { row, role } = await authorise(c);
+  const edit = (await c.req.json().catch(() => null)) as BuildEdit | null;
+  if (edit === null || typeof edit !== "object") throw new UploadError("Request body is not JSON");
+  const columns = editColumns(edit, role, now());
+  if (columns !== null) {
+    await c.env.DB.prepare(`UPDATE builds SET ${columns.sql} WHERE id = ?`)
+      .bind(...columns.values, row.id)
+      .run();
+  }
+  const fresh = await authorise(c);
+  return c.json(toManage(fresh.row, fresh.role));
+});
+
+/** Gone for good: the doc, facets, stages and indexer results go with it (ON DELETE CASCADE). */
+app.delete("/builds/:id", async (c) => {
+  const { row } = await authorise(c);
+  await c.env.DB.prepare("DELETE FROM builds WHERE id = ?").bind(row.id).run();
+  return c.json({ id: row.id, deleted: true });
 });
 
 // --- The indexer ----------------------------------------------------------------------------------

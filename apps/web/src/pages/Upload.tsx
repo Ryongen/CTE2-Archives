@@ -3,7 +3,7 @@
  *
  * The text is checked locally with the same `readBuildText` the API runs, so a wrong file is
  * refused before anything is sent. The edit token comes back once and is shown once; there is no
- * account yet to keep it for you.
+ * account yet to keep it for you, so this browser remembers it as well (`edit-tokens.ts`).
  */
 
 import { readBuildText, type ReadBuild } from "@cte2/schema";
@@ -13,6 +13,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { api } from "../api.ts";
+import { rememberToken } from "../edit-tokens.ts";
 import { Turnstile, turnstileEnabled } from "../components/Turnstile.tsx";
 
 export function UploadPage(): ReactNode {
@@ -35,6 +36,9 @@ export function UploadPage(): ReactNode {
         ...(packVersion.trim() === "" ? {} : { packVersion: packVersion.trim() }),
         turnstileToken: captcha ?? undefined,
       }),
+    onSuccess: (result) => {
+      if (!result.duplicate) rememberToken(result.id, result.editToken, "owner");
+    },
     // The token was spent on the failed attempt, so get a new one for the retry.
     onError: () => setCaptchaReset((n) => n + 1),
   });
@@ -140,7 +144,7 @@ export function UploadPage(): ReactNode {
   );
 }
 
-/** The exporter writes `unknown` because the game can't see the modpack's version. */
+/** Exporters before 0.5.0 wrote `unknown`, and planned builds rarely say. */
 function knownPackVersion(read: ReadBuild | null): boolean {
   const v = read?.doc.meta?.packVersion?.trim().toLowerCase();
   return v !== undefined && v !== "" && v !== "unknown";
@@ -159,7 +163,7 @@ function Uploaded({ result }: { result: UploadResponse }): ReactNode {
           <h1>Published</h1>
           <p>
             Keep this edit token. It's the only way to change or delete the build until accounts exist, and it won't be
-            shown again:
+            shown again. This browser remembers it too, so the build's Edit link works here without it:
           </p>
           <pre className="token">{result.editToken}</pre>
         </>

@@ -6,6 +6,7 @@ import { createBrowserRouter, Navigate, NavLink, Outlet, RouterProvider } from "
 import { GameDataProvider } from "./game-data.tsx";
 import { BuildDetailPage } from "./pages/BuildDetail.tsx";
 import { BuildListPage } from "./pages/BuildList.tsx";
+import { EditBuildPage } from "./pages/EditBuild.tsx";
 import { UploadPage } from "./pages/Upload.tsx";
 import "./styles.css";
 
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/builds" replace /> },
       { path: "builds", element: <BuildListPage /> },
       { path: "builds/:id", element: <BuildDetailPage /> },
+      { path: "builds/:id/edit", element: <EditBuildPage /> },
       { path: "upload", element: <UploadPage /> },
       { path: "*", element: <p className="empty">Nothing here.</p> },
     ],

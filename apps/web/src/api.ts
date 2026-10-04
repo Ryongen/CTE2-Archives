@@ -1,5 +1,5 @@
 import type { BuildDoc, Observation } from "@cte2/schema";
-import type { BuildDetail, BuildListResponse, UploadRequest, UploadResponse } from "@cob/shared";
+import type { BuildDetail, BuildEdit, BuildListResponse, BuildManage, UploadRequest, UploadResponse } from "@cob/shared";
 
 import { API_URL } from "./config.ts";
 
@@ -20,5 +20,18 @@ export const api = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
+    }),
+  manage: (id: string, token: string) =>
+    call<BuildManage>(`/builds/${encodeURIComponent(id)}/manage`, { headers: { authorization: `Bearer ${token}` } }),
+  edit: (id: string, token: string, edit: BuildEdit) =>
+    call<BuildManage>(`/builds/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(edit),
+    }),
+  remove: (id: string, token: string) =>
+    call<{ id: string; deleted: true }>(`/builds/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
     }),
 };

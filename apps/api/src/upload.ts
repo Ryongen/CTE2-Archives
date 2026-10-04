@@ -26,7 +26,7 @@ import { catalogueSummary, normaliseVersion, type UploadRequest, type Visibility
 export class UploadError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 403 | 413 | 429 | 503 = 400,
+    readonly status: 400 | 401 | 403 | 404 | 413 | 429 | 503 = 400,
   ) {
     super(message);
   }
@@ -54,8 +54,9 @@ export type PreparedBuild = {
   packVersion: string | null;
 };
 
-const MAX_TITLE = 100;
-const MAX_NOTES = 20_000;
+export const MAX_TITLE = 100;
+export const MAX_NOTES = 20_000;
+export const MAX_PACK_VERSION = 40;
 
 /** Read the request body's `build` field into a document, whichever form it came in. */
 export async function readUpload(build: UploadRequest["build"]): Promise<ReadBuild> {
@@ -106,7 +107,7 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
     stages,
     mnsVersion: normaliseVersion(doc.meta?.mineAndSlashVersion),
     // The exporter can't see the modpack's version, so the uploader may say it instead.
-    packVersion: clip(packVersionOf(doc.meta?.packVersion) ?? packVersionOf(request.packVersion) ?? "", 40) || null,
+    packVersion: clip(packVersionOf(doc.meta?.packVersion) ?? packVersionOf(request.packVersion) ?? "", MAX_PACK_VERSION) || null,
   };
 }
 
@@ -118,11 +119,11 @@ export function contentKey(doc: BuildDoc): string {
   return JSON.stringify(doc);
 }
 
-function packVersionOf(version: string | undefined): string | undefined {
+export function packVersionOf(version: string | undefined): string | undefined {
   const v = version?.trim();
   return v === undefined || v === "" || v.toLowerCase() === "unknown" ? undefined : v;
 }
 
-function clip(text: string, max: number): string {
+export function clip(text: string, max: number): string {
   return text.trim().slice(0, max);
 }
