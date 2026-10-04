@@ -43,6 +43,15 @@ const app = new Hono<{ Bindings: Env }>();
 // uploads are guarded by Turnstile rather than by origin.
 app.use("*", cors());
 
+// Reads are cheap one by one, but D1's free tier has a daily row budget a scraper could spend.
+app.on("GET", "*", async (c, next) => {
+  if (c.env.READ_LIMIT && !c.req.path.startsWith("/internal/")) {
+    const { success } = await c.env.READ_LIMIT.limit({ key: c.req.header("cf-connecting-ip") ?? "unknown" });
+    if (!success) return c.json({ error: "Too many requests, slow down a little" }, 429);
+  }
+  await next();
+});
+
 app.onError((error, c) => {
   if (error instanceof UploadError) return c.json({ error: error.message }, error.status);
   console.error(error);
@@ -94,7 +103,10 @@ app.post("/builds", async (c) => {
   if (pack === undefined) throw new UploadError("The catalogue has no game data loaded yet", 503);
 
   const prepared = prepareBuild(read, request, JSON.parse(pack.indexData) as IndexData);
-  const hash = await sha256Hex(contentKey(prepared.doc));
+  const key = contentKey(prepared.doc);
+  // A build code is compressed, so what gets stored can be far bigger than what was sent.
+  if (key.length > MAX_UPLOAD_BYTES) throw new UploadError("Build is too large", 413);
+  const hash = await sha256Hex(key);
   const existing = await c.env.DB.prepare("SELECT id FROM builds WHERE content_hash = ?")
     .bind(hash)
     .first<{ id: string }>();

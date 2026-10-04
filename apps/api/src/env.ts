@@ -8,4 +8,6 @@ export type Env = {
   ADMIN_TOKEN?: string;
   /** Per-IP limit on `POST /builds`, from `[[ratelimits]]` in wrangler.toml. */
   UPLOAD_LIMIT?: RateLimit;
+  /** Per-IP limit on every public `GET`, from `[[ratelimits]]` in wrangler.toml. */
+  READ_LIMIT?: RateLimit;
 };

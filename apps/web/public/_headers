@@ -1,0 +1,7 @@
+# Cloudflare Pages response headers. The CSP lists every origin the site talks to: the API, CoB's
+# site (game data and icons) and Turnstile. Add to it when one of those changes.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://ryongen.github.io; connect-src 'self' https://cob-codex-api.ryongenn.workers.dev https://ryongen.github.io; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
