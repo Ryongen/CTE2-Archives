@@ -389,7 +389,8 @@ function bandedRoll(snapshot: Snapshot, rollPercent: number | undefined, rarity:
 function Skills({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild | undefined }): ReactNode {
   const { snapshot } = useWorld();
   // The rank each spell is cast at, resolved as CoB's Skills tab does it: a pinned level, else
-  // what the sheet gives (class allocation plus gear's bonus ranks), else the class allocation.
+  // what the sheet gives (class allocation plus gear's bonus ranks), else the level a capture
+  // wrote, else the class allocation.
   const ranks = useMemo(
     () => (derived === undefined ? new Map<string, number>() : spellRanks(snapshot, derived.stats, balance(snapshot))),
     [snapshot, derived],
@@ -406,7 +407,13 @@ function Skills({ doc, derived }: { doc: BuildDoc; derived: DerivedBuild | undef
           <li key={`${skill.spellId}-${i}`}>
             <SkillName
               spellId={skill.spellId}
-              rank={skill.level ?? ranks.get(skill.spellId) ?? learned.get(skill.spellId) ?? 1}
+              rank={
+                (skill.levelPinned === true ? skill.level : undefined) ??
+                ranks.get(skill.spellId) ??
+                skill.level ??
+                learned.get(skill.spellId) ??
+                1
+              }
               level={level}
             />
             {skill.main === true ? <span className="badge">Main</span> : null}
