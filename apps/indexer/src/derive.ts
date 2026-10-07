@@ -2,14 +2,27 @@
  * One build's numbers: every stage through the engine, as `build_derived` rows, and the summary
  * redone with the engine's own main skill. The Worker can't afford any of this (10 ms of CPU),
  * so it happens here and the result is sent back.
+ *
+ * A document that marks no main skill (an in-game export never does) gets the one with the
+ * highest DPS, and the API stores that choice in the document.
  */
 
 import { damageRates, deriveBuild, type DerivedBuild } from "@cte2/engine";
 import type { Snapshot } from "@cte2/extractor";
 import { mainStage, stageDoc, stageList, type BuildDoc, type IndexData } from "@cte2/schema";
-import { catalogueSummary, type DerivedRequest, type DerivedStage } from "@cob/shared";
+import { catalogueSummary, markedMainSkill, withMainSkill, type DerivedRequest, type DerivedStage } from "@cob/shared";
+import { bestSkill } from "@cob/shared/skill-dps";
 
-export function deriveForCatalogue(doc: BuildDoc, snapshot: Snapshot, index: IndexData): DerivedRequest {
+export function deriveForCatalogue(uploaded: BuildDoc, snapshot: Snapshot, index: IndexData): DerivedRequest {
+  let picked: number | undefined;
+  if (markedMainSkill(uploaded) === undefined && uploaded.config?.mainIsBasicAttack !== true) {
+    try {
+      picked = bestSkill(uploaded, snapshot)?.index;
+    } catch {
+      // The derive below reports a build the engine can't handle.
+    }
+  }
+  const doc = picked === undefined ? uploaded : withMainSkill(uploaded, picked);
   const main = mainStage(doc);
   const stages: DerivedStage[] = [];
   let mainDerived: DerivedBuild | undefined;
@@ -30,6 +43,7 @@ export function deriveForCatalogue(doc: BuildDoc, snapshot: Snapshot, index: Ind
     snapshotPack: snapshot.meta.mineAndSlashVersion,
     summary: catalogueSummary(mainDoc, index, mainSkill === undefined ? {} : { mainSkill }),
     stages,
+    ...(picked === undefined ? {} : { markMainSkill: picked }),
   };
 }
 

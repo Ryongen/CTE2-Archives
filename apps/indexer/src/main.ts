@@ -8,6 +8,7 @@
  * so after a pack update the next run redoes everything.
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import type { Snapshot } from "@cte2/extractor";
@@ -76,9 +77,13 @@ async function main(): Promise<void> {
       const response = await fetch(`${API}/internal/builds/${encodeURIComponent(build.id)}/derived`, {
         method: "PUT",
         headers: { ...auth, "content-type": "application/json" },
-        body: JSON.stringify(result),
+        body: JSON.stringify({ ...result, docHash: createHash("sha256").update(build.doc).digest("hex") }),
       });
-      if (!response.ok) {
+      if (response.status === 409) {
+        // Edited mid-run; it's still pending, so the next batch picks up the new document.
+        tried.delete(build.id);
+        console.log(`${build.id}: changed while indexing, redoing`);
+      } else if (!response.ok) {
         failed++;
         console.error(`${build.id}: ${response.status} ${await response.text()}`);
       } else if (result.status === "invalid") {

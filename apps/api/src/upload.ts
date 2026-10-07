@@ -21,7 +21,7 @@ import {
   type IndexData,
   type ReadBuild,
 } from "@cte2/schema";
-import { catalogueSummary, normaliseVersion, type UploadRequest, type Visibility } from "@cob/shared";
+import { canBeMainSkill, catalogueSummary, normaliseVersion, withMainSkill, type UploadRequest, type Visibility } from "@cob/shared";
 
 export class UploadError extends Error {
   constructor(
@@ -42,7 +42,10 @@ export type PreparedStage = {
 };
 
 export type PreparedBuild = {
+  /** What gets stored: the upload with the uploader's main skill marked. */
   doc: BuildDoc;
+  /** The document as uploaded, which is what identifies it (`contentKey`). */
+  uploaded: BuildDoc;
   observed: ReadBuild["observed"];
   title: string;
   notes: string;
@@ -78,7 +81,11 @@ export function choosePack<P extends { mnsVersion: string }>(doc: BuildDoc, pack
 }
 
 export function prepareBuild(read: ReadBuild, request: UploadRequest, index: IndexData): PreparedBuild {
-  const { doc, observed } = read;
+  const { observed } = read;
+  if (request.mainSkill !== undefined && !canBeMainSkill(read.doc, request.mainSkill)) {
+    throw new UploadError("The chosen main skill isn't one of the build's enabled skills");
+  }
+  const doc = request.mainSkill === undefined ? read.doc : withMainSkill(read.doc, request.mainSkill);
   const main = mainStage(doc);
   // Summarise the stage the build is about, not whichever one happened to be open.
   const summary = catalogueSummary(main === undefined ? doc : stageDoc(doc, main), index);
@@ -98,6 +105,7 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
 
   return {
     doc,
+    uploaded: read.doc,
     observed,
     title: clip(request.title ?? "", MAX_TITLE) || clip(doc.meta?.name ?? "", MAX_TITLE) || `Level ${summary.level} build`,
     notes: clip(request.notes ?? "", MAX_NOTES),
@@ -113,7 +121,7 @@ export function prepareBuild(read: ReadBuild, request: UploadRequest, index: Ind
 
 /**
  * What identifies a build for de-duplication: the document alone, so the same build uploaded
- * twice with different titles is still one build.
+ * twice with different titles, or a different main skill picked, is still one build.
  */
 export function contentKey(doc: BuildDoc): string {
   return JSON.stringify(doc);

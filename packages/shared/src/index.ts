@@ -3,3 +3,4 @@ export * from "./filters.ts";
 export * from "./summary.ts";
 export * from "./legality.ts";
 export * from "./capture.ts";
+export * from "./main-skill.ts";

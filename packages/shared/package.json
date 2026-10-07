@@ -5,13 +5,16 @@
   "description": "What the catalogue's API, site and indexer agree on: response shapes and the filter codec",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./skill-dps": "./src/skill-dps.ts"
   },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@cte2/engine": "0.0.1",
+    "@cte2/extractor": "0.0.1",
     "@cte2/schema": "0.0.1"
   }
 }

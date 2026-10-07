@@ -1,9 +1,12 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { summaryFacets, type BuildSummary, type FacetKind, type IndexData } from "@cte2/schema";
+import { summaryFacets, type BuildDoc, type BuildSummary, type FacetKind, type IndexData } from "@cte2/schema";
 import {
   MAX_UPLOAD_BYTES,
+  canBeMainSkill,
+  markedMainSkill,
+  withMainSkill,
   PAGE_SIZE,
   parseFilters,
   type BuildDetail,
@@ -103,7 +106,7 @@ app.post("/builds", async (c) => {
   if (pack === undefined) throw new UploadError("The catalogue has no game data loaded yet", 503);
 
   const prepared = prepareBuild(read, request, JSON.parse(pack.indexData) as IndexData);
-  const key = contentKey(prepared.doc);
+  const key = contentKey(prepared.uploaded);
   // A build code is compressed, so what gets stored can be far bigger than what was sent.
   if (key.length > MAX_UPLOAD_BYTES) throw new UploadError("Build is too large", 413);
   const hash = await sha256Hex(key);
@@ -307,15 +310,38 @@ app.patch("/builds/:id", async (c) => {
   const { row, role } = await authorise(c);
   const edit = (await c.req.json().catch(() => null)) as BuildEdit | null;
   if (edit === null || typeof edit !== "object") throw new UploadError("Request body is not JSON");
+  const db = c.env.DB;
   const columns = editColumns(edit, role, now());
-  if (columns !== null) {
-    await c.env.DB.prepare(`UPDATE builds SET ${columns.sql} WHERE id = ?`)
-      .bind(...columns.values, row.id)
-      .run();
-  }
+  const statements = columns === null ? [] : [db.prepare(`UPDATE builds SET ${columns.sql} WHERE id = ?`).bind(...columns.values, row.id)];
+  if (edit.mainSkill !== undefined) statements.push(...(await mainSkillEdit(db, row.id, edit.mainSkill)));
+  if (statements.length > 0) await db.batch(statements);
   const fresh = await authorise(c);
   return c.json(toManage(fresh.row, fresh.role));
 });
+
+/**
+ * Marking a different main skill: the one edit that changes the document. The list shows the
+ * new skill at once; the DPS behind it waits for the indexer, which the build goes back to.
+ * `content_hash` stays the upload's, so the same file uploaded again is still a duplicate.
+ */
+async function mainSkillEdit(db: D1Database, id: string, index: number): Promise<D1PreparedStatement[]> {
+  const stored = await db.prepare("SELECT doc FROM build_docs WHERE build_id = ?").bind(id).first<{ doc: string }>();
+  if (stored === null) throw new UploadError("No such build", 404);
+  const doc = JSON.parse(stored.doc) as BuildDoc;
+  if (!canBeMainSkill(doc, index)) throw new UploadError("That isn't one of the build's enabled skills");
+  if (markedMainSkill(doc) === index) return [];
+  const spellId = doc.skills![index]!.spellId;
+  return [
+    db.prepare("UPDATE build_docs SET doc = ? WHERE build_id = ?").bind(JSON.stringify(withMainSkill(doc, index)), id),
+    db
+      .prepare(
+        `UPDATE builds SET main_skill = ?, status = CASE status WHEN 'hidden' THEN 'hidden' ELSE 'pending' END,
+          updated_at = ? WHERE id = ?`,
+      )
+      .bind(spellId, now(), id),
+    db.prepare("UPDATE build_stages SET main_skill = ? WHERE build_id = ?").bind(spellId, id),
+  ];
+}
 
 /** Gone for good: the doc, facets, stages and indexer results go with it (ON DELETE CASCADE). */
 app.delete("/builds/:id", async (c) => {
@@ -356,8 +382,12 @@ app.put("/internal/builds/:id/derived", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<DerivedRequest>();
   const db = c.env.DB;
-  const exists = await db.prepare("SELECT 1 AS x FROM builds WHERE id = ?").bind(id).first();
-  if (exists === null) return c.json({ error: "No such build" }, 404);
+  const stored = await db.prepare("SELECT doc FROM build_docs WHERE build_id = ?").bind(id).first<{ doc: string }>();
+  if (stored === null) return c.json({ error: "No such build" }, 404);
+  // Edited while the indexer was working on it: these numbers are for the old document.
+  if (body.docHash !== undefined && body.docHash !== (await sha256Hex(stored.doc))) {
+    return c.json({ error: "The build changed while it was being indexed" }, 409);
+  }
 
   if (body.status === "invalid") {
     await db.batch([
@@ -368,7 +398,11 @@ app.put("/internal/builds/:id/derived", async (c) => {
   }
 
   const s = body.summary;
+  // The indexer picked the main skill for a document that named none; store it, so CoB opens the
+  // build on the same skill the list shows.
+  const marked = body.markMainSkill === undefined ? [] : indexerMainSkill(db, id, stored.doc, body.markMainSkill);
   await db.batch([
+    ...marked,
     db
       .prepare(
         `UPDATE builds SET status = CASE status WHEN 'hidden' THEN 'hidden' ELSE 'indexed' END,
@@ -407,6 +441,17 @@ app.put("/internal/builds/:id/derived", async (c) => {
   ]);
   return c.json({ ok: true });
 });
+
+/** Only ever fills in a missing choice: a skill the uploader picked is never overwritten. */
+function indexerMainSkill(db: D1Database, id: string, stored: string, index: number): D1PreparedStatement[] {
+  const doc = JSON.parse(stored) as BuildDoc;
+  if (markedMainSkill(doc) !== undefined || doc.config?.mainIsBasicAttack === true || !canBeMainSkill(doc, index)) return [];
+  const spellId = doc.skills![index]!.spellId;
+  return [
+    db.prepare("UPDATE build_docs SET doc = ? WHERE build_id = ?").bind(JSON.stringify(withMainSkill(doc, index)), id),
+    db.prepare("UPDATE build_stages SET main_skill = ? WHERE build_id = ?").bind(spellId, id),
+  ];
+}
 
 export default app;
 

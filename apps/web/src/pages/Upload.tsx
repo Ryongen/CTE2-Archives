@@ -7,13 +7,14 @@
  */
 
 import { readBuildText, type ReadBuild } from "@cte2/schema";
-import { MAX_UPLOAD_BYTES, type UploadResponse, type Visibility } from "@cob/shared";
+import { markedMainSkill, MAX_UPLOAD_BYTES, type UploadResponse, type Visibility } from "@cob/shared";
 import { useMutation } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { api } from "../api.ts";
 import { rememberToken } from "../edit-tokens.ts";
+import { MainSkillPicker } from "../components/MainSkillPicker.tsx";
 import { Turnstile, turnstileEnabled } from "../components/Turnstile.tsx";
 
 export function UploadPage(): ReactNode {
@@ -24,6 +25,7 @@ export function UploadPage(): ReactNode {
   const [notes, setNotes] = useState("");
   const [packVersion, setPackVersion] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");
+  const [mainSkill, setMainSkill] = useState<number | undefined>(undefined);
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [captchaReset, setCaptchaReset] = useState(0);
 
@@ -35,6 +37,7 @@ export function UploadPage(): ReactNode {
         visibility,
         ...(packVersion.trim() === "" ? {} : { packVersion: packVersion.trim() }),
         turnstileToken: captcha ?? undefined,
+        ...(mainSkill === undefined || read === null || mainSkill === markedMainSkill(read.doc) ? {} : { mainSkill }),
       }),
     onSuccess: (result) => {
       if (!result.duplicate) rememberToken(result.id, result.editToken, "owner");
@@ -60,6 +63,7 @@ export function UploadPage(): ReactNode {
     try {
       const result = await readBuildText(next);
       setRead(result);
+      setMainSkill(markedMainSkill(result.doc));
       setProblem(null);
       if (title === "" && result.doc.meta?.name) setTitle(result.doc.meta.name);
     } catch (error) {
@@ -119,6 +123,7 @@ export function UploadPage(): ReactNode {
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} placeholder="How it plays, what to level with, anything else" />
         </label>
+        {read === null ? null : <MainSkillPicker doc={read.doc} value={mainSkill} onChange={setMainSkill} />}
         {knownPackVersion(read) ? null : (
           <label>
             Modpack version

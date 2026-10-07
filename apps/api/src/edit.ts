@@ -2,8 +2,9 @@
  * Changing a build after upload: its uploader, holding the edit token they were shown once, or
  * the site admin, holding `ADMIN_TOKEN`. There are no accounts yet, so the token is the identity.
  *
- * Only what the uploader typed can change. The document itself can't: its facets, stages and
- * summary are all worked out from it, and a different build is a new upload.
+ * Only what the uploader typed can change, plus which skill is the main one (`mainSkillEdit` in
+ * index.ts). The rest of the document can't: its facets, stages and summary are all worked out
+ * from it, and a different build is a new upload.
  */
 
 import type { BuildEdit, EditRole } from "@cob/shared";

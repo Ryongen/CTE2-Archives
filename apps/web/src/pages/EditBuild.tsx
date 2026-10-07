@@ -1,15 +1,17 @@
 /**
  * Change or delete a build: its uploader with the edit token shown after upload, or the site
- * admin with the admin token. Only what was typed at upload can change; a different build is a
- * new upload.
+ * admin with the admin token. Only what was typed at upload, and which skill is the main one, can
+ * change; a different build is a new upload.
  */
 
-import type { BuildManage, Visibility } from "@cob/shared";
+import type { BuildDoc } from "@cte2/schema";
+import { markedMainSkill, type BuildManage, type Visibility } from "@cob/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { api } from "../api.ts";
+import { MainSkillPicker } from "../components/MainSkillPicker.tsx";
 import { forgetToken, rememberToken, savedToken } from "../edit-tokens.ts";
 
 export function EditBuildPage(): ReactNode {
@@ -69,7 +71,10 @@ function EditForm({ id, token, start }: { id: string; token: string; start: Buil
   const [packVersion, setPackVersion] = useState(start.packVersion ?? "");
   const [visibility, setVisibility] = useState<Visibility>(start.visibility);
   const [hidden, setHidden] = useState(start.hidden);
+  // Only sent when it differs from what the stored document marks.
+  const [picked, setPicked] = useState<number | undefined>(undefined);
   const admin = start.role === "admin";
+  const doc = useQuery({ queryKey: ["doc", id], queryFn: () => api.doc(id), staleTime: Infinity });
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["build", id] });
@@ -77,9 +82,21 @@ function EditForm({ id, token, start }: { id: string; token: string; start: Buil
   };
 
   const save = useMutation({
-    mutationFn: () => api.edit(id, token, { title, notes, packVersion, visibility, ...(admin ? { hidden } : {}) }),
-    onSuccess: (saved) => {
+    mutationFn: (mainSkill: number | undefined) =>
+      api.edit(id, token, {
+        title,
+        notes,
+        packVersion,
+        visibility,
+        ...(admin ? { hidden } : {}),
+        ...(mainSkill === undefined ? {} : { mainSkill }),
+      }),
+    onSuccess: (saved, mainSkill) => {
       queryClient.setQueryData(["manage", id, token], saved);
+      if (mainSkill !== undefined) {
+        setPicked(undefined);
+        void queryClient.invalidateQueries({ queryKey: ["doc", id] });
+      }
       refresh();
     },
   });
@@ -108,6 +125,7 @@ function EditForm({ id, token, start }: { id: string; token: string; start: Buil
         Modpack version
         <input value={packVersion} onChange={(e) => setPackVersion(e.target.value)} maxLength={40} placeholder="e.g. 2.1.4" />
       </label>
+      {doc.data === undefined ? null : <MainSkillField key={JSON.stringify(doc.data.skills ?? [])} doc={doc.data} onPick={setPicked} />}
       <label className="row">
         <input type="checkbox" checked={visibility === "unlisted"} onChange={(e) => setVisibility(e.target.checked ? "unlisted" : "public")} />
         Unlisted: only people with the link can see it
@@ -120,7 +138,7 @@ function EditForm({ id, token, start }: { id: string; token: string; start: Buil
       ) : null}
 
       <div className="row">
-        <button className="primary" disabled={title.trim() === "" || save.isPending} onClick={() => save.mutate()}>
+        <button className="primary" disabled={title.trim() === "" || save.isPending} onClick={() => save.mutate(picked)}>
           {save.isPending ? "Saving…" : "Save"}
         </button>
         {save.isSuccess && !save.isPending ? <span className="good">Saved.</span> : null}
@@ -139,4 +157,18 @@ function EditForm({ id, token, start }: { id: string; token: string; start: Buil
       {remove.error ? <p className="error">{remove.error.message}</p> : null}
     </div>
   );
+}
+
+/** The picker over the stored document; reports a pick only when it changes the document. */
+function MainSkillField({ doc, onPick }: { doc: BuildDoc; onPick: (index: number | undefined) => void }): ReactNode {
+  const marked = markedMainSkill(doc);
+  const [value, setValue] = useState(marked);
+  const choose = useCallback(
+    (index: number) => {
+      setValue(index);
+      onPick(index === marked ? undefined : index);
+    },
+    [marked, onPick],
+  );
+  return <MainSkillPicker doc={doc} value={value} onChange={choose} />;
 }

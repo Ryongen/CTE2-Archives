@@ -23,6 +23,8 @@ export type UploadRequest = {
   packVersion?: string;
   /** Turnstile response token; required when the API has a Turnstile secret configured. */
   turnstileToken?: string;
+  /** Index into the document's skills to mark as the main one; left out keeps what it says. */
+  mainSkill?: number;
 };
 
 export type UploadResponse =
@@ -116,6 +118,8 @@ export type BuildEdit = {
   packVersion?: string;
   /** Admin only. Unhiding sends the build back to the indexer. */
   hidden?: boolean;
+  /** Index into the document's skills to make the main one. Sends the build back to the indexer. */
+  mainSkill?: number;
 };
 
 // --- The indexer's side ------------------------------------------------------------------------
@@ -143,7 +147,12 @@ export type DerivedStage = {
 };
 
 /** `PUT /internal/builds/:id/derived`. */
-export type DerivedRequest =
+/**
+ * `docHash` is the SHA-256 (hex) of the `doc` text the numbers were computed from. When the stored
+ * document no longer matches (the uploader picked another main skill meanwhile), the API refuses
+ * the result with 409 and the build stays pending.
+ */
+export type DerivedRequest = { docHash?: string } & (
   | {
       status: "indexed";
       /** The pack's `mineAndSlashVersion` the numbers were computed against. */
@@ -151,6 +160,9 @@ export type DerivedRequest =
       /** Rewritten with the engine's main skill, which can differ from the upload-time guess. */
       summary: BuildSummary;
       stages: DerivedStage[];
+      /** The document marked no main skill, so the indexer picked this one (index into its skills). */
+      markMainSkill?: number;
     }
   /** The engine couldn't compute it at all. Such a build leaves the list. */
-  | { status: "invalid"; reason: string };
+  | { status: "invalid"; reason: string }
+);
